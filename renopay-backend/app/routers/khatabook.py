@@ -37,12 +37,20 @@ async def _ensure_khatabook_columns(db: AsyncSession):
     ddls = [
         "ALTER TABLE khatabook_customers ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();",
         "ALTER TABLE khatabook_customers ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();",
+        "ALTER TABLE khatabook_customers ALTER COLUMN created_at SET DEFAULT NOW();",
+        "ALTER TABLE khatabook_customers ALTER COLUMN updated_at SET DEFAULT NOW();",
+        "ALTER TABLE khatabook_customers ALTER COLUMN created_at DROP NOT NULL;",
+        "ALTER TABLE khatabook_customers ALTER COLUMN updated_at DROP NOT NULL;",
         "ALTER TABLE khatabook_customers ADD COLUMN IF NOT EXISTS upi_id VARCHAR(80);",
         "ALTER TABLE khatabook_customers ADD COLUMN IF NOT EXISTS email VARCHAR(120);",
         "ALTER TABLE khatabook_customers ADD COLUMN IF NOT EXISTS address TEXT;",
         "ALTER TABLE khatabook_customers ADD COLUMN IF NOT EXISTS net_balance_paise BIGINT DEFAULT 0;",
         "ALTER TABLE khatabook_entries ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();",
         "ALTER TABLE khatabook_entries ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();",
+        "ALTER TABLE khatabook_entries ALTER COLUMN created_at SET DEFAULT NOW();",
+        "ALTER TABLE khatabook_entries ALTER COLUMN updated_at SET DEFAULT NOW();",
+        "ALTER TABLE khatabook_entries ALTER COLUMN created_at DROP NOT NULL;",
+        "ALTER TABLE khatabook_entries ALTER COLUMN updated_at DROP NOT NULL;",
         "ALTER TABLE khatabook_entries ADD COLUMN IF NOT EXISTS items_description TEXT;",
         "ALTER TABLE khatabook_entries ADD COLUMN IF NOT EXISTS entry_date DATE DEFAULT CURRENT_DATE;",
         "ALTER TABLE khatabook_entries ADD COLUMN IF NOT EXISTS payment_mode VARCHAR(20) DEFAULT 'cash';",
@@ -182,6 +190,7 @@ async def create_customer(
     db: AsyncSession = Depends(get_db),
 ):
     """Onboard a new customer to merchant's Khatabook."""
+    await _ensure_khatabook_columns(db)
     clean_phone = re.sub(r"\D", "", payload.phone)
     if len(clean_phone) < 10:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Phone number must be at least 10 digits")
@@ -196,6 +205,7 @@ async def create_customer(
     if existing_res.scalar_one_or_none():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Customer with this phone number already exists in your Khata.")
 
+    now = datetime.now(timezone.utc)
     customer = KhatabookCustomer(
         merchant_user_id=user.id,
         name=payload.name.strip(),
@@ -204,9 +214,20 @@ async def create_customer(
         email=payload.email.strip() if payload.email else None,
         address=payload.address.strip() if payload.address else None,
         net_balance_paise=0,
+        created_at=now,
+        updated_at=now,
     )
     db.add(customer)
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        await _ensure_khatabook_columns(db)
+        customer.created_at = datetime.now(timezone.utc)
+        customer.updated_at = datetime.now(timezone.utc)
+        db.add(customer)
+        await db.commit()
+
     await db.refresh(customer)
 
     return {
@@ -304,8 +325,7 @@ async def add_ledger_entry(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "entry_type must be 'gave' or 'received'")
 
     amount_paise = int(round(payload.amount * 100))
-    entry_date = payload.entry_date or date.today()
-
+    now = datetime.now(timezone.utc)
     entry = KhatabookEntry(
         customer_id=customer.id,
         merchant_user_id=user.id,
@@ -314,6 +334,8 @@ async def add_ledger_entry(
         items_description=payload.items_description.strip() if payload.items_description else None,
         entry_date=entry_date,
         payment_mode=payload.payment_mode.lower(),
+        created_at=now,
+        updated_at=now,
     )
     db.add(entry)
 
@@ -479,6 +501,7 @@ async def parse_voice_entry(
     saved_entry = None
     if payload.auto_save and matched_customer and amount > 0:
         amount_paise = int(round(amount * 100))
+        now = datetime.now(timezone.utc)
         entry = KhatabookEntry(
             customer_id=matched_customer.id,
             merchant_user_id=user.id,
@@ -488,6 +511,8 @@ async def parse_voice_entry(
             entry_date=date.today(),
             payment_mode="cash" if entry_type == "gave" else "renopay_upi",
             voice_transcribed=True,
+            created_at=now,
+            updated_at=now,
         )
         db.add(entry)
         if entry_type == "gave":

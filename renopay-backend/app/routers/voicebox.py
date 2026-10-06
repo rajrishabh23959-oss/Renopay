@@ -32,6 +32,10 @@ async def _ensure_voicebox_columns(db: AsyncSession, force: bool = False):
     ddls = [
         "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();",
         "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();",
+        "ALTER TABLE merchant_voicebox ALTER COLUMN created_at SET DEFAULT NOW();",
+        "ALTER TABLE merchant_voicebox ALTER COLUMN updated_at SET DEFAULT NOW();",
+        "ALTER TABLE merchant_voicebox ALTER COLUMN created_at DROP NOT NULL;",
+        "ALTER TABLE merchant_voicebox ALTER COLUMN updated_at DROP NOT NULL;",
         "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS language VARCHAR(20) DEFAULT 'hi';",
         "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT FALSE;",
         "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS activated_at TIMESTAMP WITH TIME ZONE;",
@@ -320,6 +324,8 @@ async def activate_voicebox(
             activated_at=now,
             expires_at=now + timedelta(days=180),
             target_settlement_vpa=OFFICIAL_SETTLEMENT_VPA,
+            created_at=now,
+            updated_at=now,
         )
         db.add(vb)
     else:
