@@ -223,12 +223,35 @@ async def create_customer(
     except Exception:
         await db.rollback()
         await _ensure_khatabook_columns(db)
-        customer.created_at = datetime.now(timezone.utc)
-        customer.updated_at = datetime.now(timezone.utc)
-        db.add(customer)
+        raw_cust = """
+            INSERT INTO khatabook_customers (
+                id, merchant_user_id, name, phone, upi_id, email, address,
+                net_balance_paise, created_at, updated_at
+            ) VALUES (
+                :id, :uid, :name, :phone, :upi_id, :email, :address,
+                0, :now, :now
+            )
+            ON CONFLICT (id) DO NOTHING;
+        """
+        await db.execute(
+            text(raw_cust),
+            {
+                "id": customer.id,
+                "uid": user.id,
+                "name": customer.name,
+                "phone": customer.phone,
+                "upi_id": customer.upi_id,
+                "email": customer.email,
+                "address": customer.address,
+                "now": now,
+            }
+        )
         await db.commit()
 
-    await db.refresh(customer)
+    try:
+        await db.refresh(customer)
+    except Exception:
+        pass
 
     return {
         "success": True,

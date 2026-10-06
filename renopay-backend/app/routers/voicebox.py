@@ -315,26 +315,70 @@ async def activate_voicebox(
 
     # 4. Upsert MerchantVoiceBox record
     now = datetime.now(timezone.utc)
+    await _ensure_voicebox_columns(db, force=True)
     vb = await _get_or_repair_voicebox(db, user.id)
     if not vb:
+        vb_id = uuid.uuid4()
         vb = MerchantVoiceBox(
+            id=vb_id,
             user_id=user.id,
             is_active=True,
             language=payload.language,
             activated_at=now,
             expires_at=now + timedelta(days=180),
             target_settlement_vpa=OFFICIAL_SETTLEMENT_VPA,
+            auto_announce_enabled=True,
+            announce_balance=True,
             created_at=now,
             updated_at=now,
         )
         db.add(vb)
     else:
+        vb_id = vb.id
         vb.is_active = True
         vb.language = payload.language
         vb.activated_at = now
         vb.expires_at = now + timedelta(days=180)
+        vb.updated_at = now
 
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        # Direct DDL relax on database
+        await _ensure_voicebox_columns(db, force=True)
+        # Execute direct SQL upsert to guarantee columns and values are written
+        raw_upsert = """
+            INSERT INTO merchant_voicebox (
+                id, user_id, is_active, language, activated_at, expires_at,
+                target_settlement_vpa, auto_announce_enabled, announce_balance,
+                created_at, updated_at
+            ) VALUES (
+                :id, :user_id, true, :lang, :activated_at, :expires_at,
+                :vpa, true, true, :now, :now
+            )
+            ON CONFLICT (user_id) DO UPDATE SET
+                is_active = true,
+                language = EXCLUDED.language,
+                activated_at = EXCLUDED.activated_at,
+                expires_at = EXCLUDED.expires_at,
+                updated_at = EXCLUDED.updated_at;
+        """
+        await db.execute(
+            text(raw_upsert),
+            {
+                "id": vb_id,
+                "user_id": user.id,
+                "lang": payload.language,
+                "activated_at": now,
+                "expires_at": now + timedelta(days=180),
+                "vpa": OFFICIAL_SETTLEMENT_VPA,
+                "now": now,
+            }
+        )
+        await db.commit()
+        # Re-fetch object
+        vb = await _get_or_repair_voicebox(db, user.id)
 
     sample_announcement = build_announcement_text(
         payload.language,
