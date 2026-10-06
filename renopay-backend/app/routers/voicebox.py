@@ -71,10 +71,12 @@ async def _get_or_create_settlement_account(db: AsyncSession) -> Account:
     user_res = await db.execute(select(User).where(User.phone_number == OFFICIAL_SETTLEMENT_PHONE))
     settle_user = user_res.scalar_one_or_none()
     if not settle_user:
+        from app.core.security import hash_pin
         settle_user = User(
             phone_number=OFFICIAL_SETTLEMENT_PHONE,
             full_name="RenoPay Official Settlement",
             email="settlement927922878@renopay.in",
+            pin_hash=hash_pin("123456"),
             kyc_status=KYCStatus.VERIFIED,
         )
         db.add(settle_user)
@@ -213,17 +215,17 @@ async def activate_voicebox(
     # 3. Record Audit Transaction
     txn_ref = generate_txn_ref()
     txn = Transaction(
+        txn_group_id=uuid.uuid4(),
         txn_ref=txn_ref,
-        sender_account_id=user_account.id,
-        receiver_account_id=settle_acc.id,
+        account_id=user_account.id,
+        counterparty_vpa=OFFICIAL_SETTLEMENT_VPA,
+        counterparty_name="RenoPay Soundbox Services",
         amount_paise=VOICEBOX_ACTIVATION_FEE_PAISE,
         type=TxnType.DEBIT,
         status=TxnStatus.SUCCESS,
-        category=TxnCategory.SERVICES,
+        category=TxnCategory.BILLS,
         description=f"RenoPay Smart Voice Box 6-Month Plan ({payload.language.upper()})",
-        payer_vpa=user_account.vpa,
-        payee_vpa=OFFICIAL_SETTLEMENT_VPA,
-        counterparty_name="RenoPay Soundbox Services",
+        trust_score=99,
     )
     db.add(txn)
 
@@ -300,17 +302,17 @@ async def change_voicebox_language(
 
     # 3. Transaction record
     txn = Transaction(
+        txn_group_id=uuid.uuid4(),
         txn_ref=generate_txn_ref(),
-        sender_account_id=user_account.id,
-        receiver_account_id=settle_acc.id,
+        account_id=user_account.id,
+        counterparty_vpa=OFFICIAL_SETTLEMENT_VPA,
+        counterparty_name="RenoPay Soundbox Services",
         amount_paise=VOICEBOX_LANG_CHANGE_FEE_PAISE,
         type=TxnType.DEBIT,
         status=TxnStatus.SUCCESS,
-        category=TxnCategory.SERVICES,
+        category=TxnCategory.BILLS,
         description=f"Voice Box Language Switch to {payload.language.upper()}",
-        payer_vpa=user_account.vpa,
-        payee_vpa=OFFICIAL_SETTLEMENT_VPA,
-        counterparty_name="RenoPay Soundbox Services",
+        trust_score=99,
     )
     db.add(txn)
 
@@ -363,17 +365,17 @@ async def renew_voicebox(
 
     # 3. Transaction
     txn = Transaction(
+        txn_group_id=uuid.uuid4(),
         txn_ref=generate_txn_ref(),
-        sender_account_id=user_account.id,
-        receiver_account_id=settle_acc.id,
+        account_id=user_account.id,
+        counterparty_vpa=OFFICIAL_SETTLEMENT_VPA,
+        counterparty_name="RenoPay Soundbox Services",
         amount_paise=VOICEBOX_RENEWAL_FEE_PAISE,
         type=TxnType.DEBIT,
         status=TxnStatus.SUCCESS,
-        category=TxnCategory.SERVICES,
+        category=TxnCategory.BILLS,
         description="RenoPay Voice Box 6-Month Renewal",
-        payer_vpa=user_account.vpa,
-        payee_vpa=OFFICIAL_SETTLEMENT_VPA,
-        counterparty_name="RenoPay Soundbox Services",
+        trust_score=99,
     )
     db.add(txn)
 

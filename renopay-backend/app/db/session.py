@@ -60,6 +60,51 @@ async def init_db_if_needed():
         # Always ensure newly added tables (like merchant_voicebox, khatabook) are created
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            for ddl in [
+                """CREATE TABLE IF NOT EXISTS merchant_voicebox (
+                    id UUID PRIMARY KEY,
+                    user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                    is_active BOOLEAN DEFAULT FALSE,
+                    language VARCHAR(20) DEFAULT 'hi',
+                    activated_at TIMESTAMP WITH TIME ZONE,
+                    expires_at TIMESTAMP WITH TIME ZONE,
+                    target_settlement_vpa VARCHAR(50) DEFAULT '927922878@renopay',
+                    auto_announce_enabled BOOLEAN DEFAULT TRUE,
+                    announce_balance BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                );""",
+                """CREATE TABLE IF NOT EXISTS khatabook_customers (
+                    id UUID PRIMARY KEY,
+                    merchant_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    name VARCHAR(120) NOT NULL,
+                    phone VARCHAR(20) NOT NULL,
+                    upi_id VARCHAR(80),
+                    email VARCHAR(120),
+                    address TEXT,
+                    net_balance_paise BIGINT DEFAULT 0,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                );""",
+                """CREATE TABLE IF NOT EXISTS khatabook_entries (
+                    id UUID PRIMARY KEY,
+                    customer_id UUID NOT NULL REFERENCES khatabook_customers(id) ON DELETE CASCADE,
+                    merchant_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    entry_type VARCHAR(10) NOT NULL,
+                    amount_paise BIGINT NOT NULL,
+                    items_description TEXT,
+                    entry_date DATE DEFAULT CURRENT_DATE,
+                    payment_mode VARCHAR(20) DEFAULT 'cash',
+                    renopay_txn_ref VARCHAR(64),
+                    voice_transcribed BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                );""",
+            ]:
+                try:
+                    await conn.execute(text(ddl))
+                except Exception as e:
+                    print(f"Table DDL notice: {e}")
 
         if not tables_exist:
             async with engine.begin() as conn:
