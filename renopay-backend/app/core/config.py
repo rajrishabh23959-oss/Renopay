@@ -103,15 +103,34 @@ class Settings(BaseSettings):
             raise ValueError("FIELD_ENCRYPTION_KEY must be changed in non-development environments")
         return v
 
-    @field_validator("CORS_ORIGINS", mode="before")
+    @field_validator("CORS_ORIGINS")
     @classmethod
     def validate_cors_origins(cls, v):
+        default_origins = [
+            "http://localhost:5173",
+            "http://localhost:3000",
+            "http://10.0.2.2:8000",
+            "http://10.0.2.2:5173",
+            "https://renopay-original.vercel.app",
+            "https://localhost",
+            "http://localhost",
+            "capacitor://localhost",
+            "ionic://localhost",
+        ]
         if isinstance(v, str):
             v_stripped = v.strip()
+            if not v_stripped:
+                return default_origins
             if v_stripped.startswith("[") and v_stripped.endswith("]"):
-                import json
-                return json.loads(v_stripped)
-            return [x.strip() for x in v.split(",") if x.strip()]
+                try:
+                    import json
+                    parsed = json.loads(v_stripped)
+                    if isinstance(parsed, list):
+                        return parsed
+                except Exception:
+                    pass
+            origins = [x.strip() for x in v.split(",") if x.strip()]
+            return origins or default_origins
         return v
 
     # --- Business rules (mirrors the mock's constants) ---
@@ -122,7 +141,7 @@ class Settings(BaseSettings):
     PRIVACY_CODE_THRESHOLD_PAISE: int = 200_000
 
     # --- CORS ---
-    CORS_ORIGINS: list[str] = [
+    CORS_ORIGINS: list[str] | str = [
         "http://localhost:5173",
         "http://localhost:3000",
         "http://10.0.2.2:8000",
