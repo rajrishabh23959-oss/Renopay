@@ -14,7 +14,7 @@ from datetime import datetime, timezone, timedelta, date
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, desc, or_
+from sqlalchemy import select, func, desc, or_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -27,6 +27,35 @@ from app.models.money_request import MoneyRequest, RequestStatus
 from app.services.khatabook_pdf import render_khatabook_pdf
 
 router = APIRouter()
+
+_khatabook_columns_checked = False
+
+async def _ensure_khatabook_columns(db: AsyncSession):
+    global _khatabook_columns_checked
+    if _khatabook_columns_checked:
+        return
+    ddls = [
+        "ALTER TABLE khatabook_customers ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();",
+        "ALTER TABLE khatabook_customers ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();",
+        "ALTER TABLE khatabook_customers ADD COLUMN IF NOT EXISTS upi_id VARCHAR(80);",
+        "ALTER TABLE khatabook_customers ADD COLUMN IF NOT EXISTS email VARCHAR(120);",
+        "ALTER TABLE khatabook_customers ADD COLUMN IF NOT EXISTS address TEXT;",
+        "ALTER TABLE khatabook_customers ADD COLUMN IF NOT EXISTS net_balance_paise BIGINT DEFAULT 0;",
+        "ALTER TABLE khatabook_entries ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();",
+        "ALTER TABLE khatabook_entries ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();",
+        "ALTER TABLE khatabook_entries ADD COLUMN IF NOT EXISTS items_description TEXT;",
+        "ALTER TABLE khatabook_entries ADD COLUMN IF NOT EXISTS entry_date DATE DEFAULT CURRENT_DATE;",
+        "ALTER TABLE khatabook_entries ADD COLUMN IF NOT EXISTS payment_mode VARCHAR(20) DEFAULT 'cash';",
+        "ALTER TABLE khatabook_entries ADD COLUMN IF NOT EXISTS renopay_txn_ref VARCHAR(64);",
+        "ALTER TABLE khatabook_entries ADD COLUMN IF NOT EXISTS voice_transcribed BOOLEAN DEFAULT FALSE;",
+    ]
+    for ddl in ddls:
+        try:
+            await db.execute(text(ddl))
+            await db.commit()
+        except Exception:
+            await db.rollback()
+    _khatabook_columns_checked = True
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -65,6 +94,7 @@ async def get_khatabook_summary(
     db: AsyncSession = Depends(get_db),
 ):
     """Overall dashboard counters for the shopkeeper."""
+    await _ensure_khatabook_columns(db)
     cust_res = await db.execute(
         select(KhatabookCustomer).where(KhatabookCustomer.merchant_user_id == user.id)
     )
@@ -106,6 +136,7 @@ async def list_customers(
     db: AsyncSession = Depends(get_db),
 ):
     """List shopkeeper's customers with net balances and latest entry date."""
+    await _ensure_khatabook_columns(db)
     query = select(KhatabookCustomer).where(KhatabookCustomer.merchant_user_id == user.id)
 
     if search and search.strip():

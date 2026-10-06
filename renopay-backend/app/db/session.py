@@ -53,74 +53,102 @@ async def init_db_if_needed():
         from app.core.money import generate_virtual_acc_no
         from sqlalchemy import select, text
 
+        # 1. Base table creation
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+        except Exception as e:
+            print(f"Base metadata create_all notice: {e}")
+
+        # 2. Individual DDL migrations - each in its own transaction so one failure doesn't abort others
+        migrations = [
+            """CREATE TABLE IF NOT EXISTS merchant_voicebox (
+                id UUID PRIMARY KEY,
+                user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                is_active BOOLEAN DEFAULT FALSE,
+                language VARCHAR(20) DEFAULT 'hi',
+                activated_at TIMESTAMP WITH TIME ZONE,
+                expires_at TIMESTAMP WITH TIME ZONE,
+                target_settlement_vpa VARCHAR(50) DEFAULT 'rishabhraj1368@renopay',
+                auto_announce_enabled BOOLEAN DEFAULT TRUE,
+                announce_balance BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );""",
+            """CREATE TABLE IF NOT EXISTS khatabook_customers (
+                id UUID PRIMARY KEY,
+                merchant_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                name VARCHAR(120) NOT NULL,
+                phone VARCHAR(20) NOT NULL,
+                upi_id VARCHAR(80),
+                email VARCHAR(120),
+                address TEXT,
+                net_balance_paise BIGINT DEFAULT 0,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );""",
+            """CREATE TABLE IF NOT EXISTS khatabook_entries (
+                id UUID PRIMARY KEY,
+                customer_id UUID NOT NULL REFERENCES khatabook_customers(id) ON DELETE CASCADE,
+                merchant_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                entry_type VARCHAR(10) NOT NULL,
+                amount_paise BIGINT NOT NULL,
+                items_description TEXT,
+                entry_date DATE DEFAULT CURRENT_DATE,
+                payment_mode VARCHAR(20) DEFAULT 'cash',
+                renopay_txn_ref VARCHAR(64),
+                voice_transcribed BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );""",
+            # merchant_voicebox columns
+            "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();",
+            "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();",
+            "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS language VARCHAR(20) DEFAULT 'hi';",
+            "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS activated_at TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS target_settlement_vpa VARCHAR(50) DEFAULT 'rishabhraj1368@renopay';",
+            "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS auto_announce_enabled BOOLEAN DEFAULT TRUE;",
+            "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS announce_balance BOOLEAN DEFAULT TRUE;",
+            # khatabook_customers columns
+            "ALTER TABLE khatabook_customers ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();",
+            "ALTER TABLE khatabook_customers ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();",
+            "ALTER TABLE khatabook_customers ADD COLUMN IF NOT EXISTS upi_id VARCHAR(80);",
+            "ALTER TABLE khatabook_customers ADD COLUMN IF NOT EXISTS email VARCHAR(120);",
+            "ALTER TABLE khatabook_customers ADD COLUMN IF NOT EXISTS address TEXT;",
+            "ALTER TABLE khatabook_customers ADD COLUMN IF NOT EXISTS net_balance_paise BIGINT DEFAULT 0;",
+            # khatabook_entries columns
+            "ALTER TABLE khatabook_entries ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();",
+            "ALTER TABLE khatabook_entries ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();",
+            "ALTER TABLE khatabook_entries ADD COLUMN IF NOT EXISTS items_description TEXT;",
+            "ALTER TABLE khatabook_entries ADD COLUMN IF NOT EXISTS entry_date DATE DEFAULT CURRENT_DATE;",
+            "ALTER TABLE khatabook_entries ADD COLUMN IF NOT EXISTS payment_mode VARCHAR(20) DEFAULT 'cash';",
+            "ALTER TABLE khatabook_entries ADD COLUMN IF NOT EXISTS renopay_txn_ref VARCHAR(64);",
+            "ALTER TABLE khatabook_entries ADD COLUMN IF NOT EXISTS voice_transcribed BOOLEAN DEFAULT FALSE;",
+            # Other legacy tables
+            "ALTER TABLE scratch_cards ADD COLUMN IF NOT EXISTS is_withdrawn BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS language_code VARCHAR(10) DEFAULT 'en';",
+            "ALTER TABLE users ALTER COLUMN avatar_url TYPE TEXT;",
+            "ALTER TABLE gift_cards ADD COLUMN IF NOT EXISTS payment_mode VARCHAR(20) DEFAULT 'normal';",
+            # Update settlement VPA across voicebox and accounts
+            "UPDATE merchant_voicebox SET target_settlement_vpa = 'rishabhraj1368@renopay' WHERE target_settlement_vpa IN ('927922878@renopay', '9279228578@renopay');",
+            "UPDATE accounts SET vpa = 'rishabhraj1368@renopay' WHERE vpa IN ('927922878@renopay', '9279228578@renopay');",
+        ]
+
+        for ddl in migrations:
+            try:
+                async with engine.begin() as conn:
+                    await conn.execute(text(ddl))
+            except Exception:
+                pass
+
+        # Seed initial demo user if needed
         async with engine.connect() as conn:
             check = await conn.execute(text("SELECT 1 FROM information_schema.tables WHERE table_name = 'users' LIMIT 1;"))
             tables_exist = check.scalar() is not None
 
-        # Always ensure newly added tables (like merchant_voicebox, khatabook) are created
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-            for ddl in [
-                """CREATE TABLE IF NOT EXISTS merchant_voicebox (
-                    id UUID PRIMARY KEY,
-                    user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-                    is_active BOOLEAN DEFAULT FALSE,
-                    language VARCHAR(20) DEFAULT 'hi',
-                    activated_at TIMESTAMP WITH TIME ZONE,
-                    expires_at TIMESTAMP WITH TIME ZONE,
-                    target_settlement_vpa VARCHAR(50) DEFAULT 'rishabhraj1368@renopay',
-                    auto_announce_enabled BOOLEAN DEFAULT TRUE,
-                    announce_balance BOOLEAN DEFAULT TRUE,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-                );""",
-                """UPDATE merchant_voicebox SET target_settlement_vpa = 'rishabhraj1368@renopay' WHERE target_settlement_vpa IN ('927922878@renopay', '9279228578@renopay');""",
-                """UPDATE accounts SET vpa = 'rishabhraj1368@renopay' WHERE vpa IN ('927922878@renopay', '9279228578@renopay');""",
-                """CREATE TABLE IF NOT EXISTS khatabook_customers (
-                    id UUID PRIMARY KEY,
-                    merchant_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    name VARCHAR(120) NOT NULL,
-                    phone VARCHAR(20) NOT NULL,
-                    upi_id VARCHAR(80),
-                    email VARCHAR(120),
-                    address TEXT,
-                    net_balance_paise BIGINT DEFAULT 0,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-                );""",
-                """CREATE TABLE IF NOT EXISTS khatabook_entries (
-                    id UUID PRIMARY KEY,
-                    customer_id UUID NOT NULL REFERENCES khatabook_customers(id) ON DELETE CASCADE,
-                    merchant_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    entry_type VARCHAR(10) NOT NULL,
-                    amount_paise BIGINT NOT NULL,
-                    items_description TEXT,
-                    entry_date DATE DEFAULT CURRENT_DATE,
-                    payment_mode VARCHAR(20) DEFAULT 'cash',
-                    renopay_txn_ref VARCHAR(64),
-                    voice_transcribed BOOLEAN DEFAULT FALSE,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-                );""",
-            ]:
-                try:
-                    await conn.execute(text(ddl))
-                except Exception as e:
-                    print(f"Table DDL notice: {e}")
-
         if not tables_exist:
-            async with engine.begin() as conn:
-                for sql in [
-                    "ALTER TABLE scratch_cards ADD COLUMN IF NOT EXISTS is_withdrawn BOOLEAN DEFAULT FALSE;",
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS language_code VARCHAR(10) DEFAULT 'en';",
-                    "ALTER TABLE users ALTER COLUMN avatar_url TYPE TEXT;",
-                    "ALTER TABLE gift_cards ADD COLUMN IF NOT EXISTS payment_mode VARCHAR(20) DEFAULT 'normal';",
-                ]:
-                    try:
-                        await conn.execute(text(sql))
-                    except Exception:
-                        pass
-
             async with AsyncSessionLocal() as session:
                 res = await session.execute(select(User).where(User.phone_number == "9876543210"))
                 existing_user = res.scalar_one_or_none()

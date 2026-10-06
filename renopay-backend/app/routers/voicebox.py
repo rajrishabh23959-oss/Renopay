@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -22,6 +22,46 @@ from app.models.transaction import Transaction, TxnStatus, TxnType, TxnCategory
 from app.core.money import generate_virtual_acc_no, generate_txn_ref
 
 router = APIRouter()
+
+_voicebox_columns_checked = False
+
+async def _ensure_voicebox_columns(db: AsyncSession, force: bool = False):
+    global _voicebox_columns_checked
+    if _voicebox_columns_checked and not force:
+        return
+    ddls = [
+        "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();",
+        "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();",
+        "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS language VARCHAR(20) DEFAULT 'hi';",
+        "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT FALSE;",
+        "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS activated_at TIMESTAMP WITH TIME ZONE;",
+        "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP WITH TIME ZONE;",
+        "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS target_settlement_vpa VARCHAR(50) DEFAULT 'rishabhraj1368@renopay';",
+        "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS auto_announce_enabled BOOLEAN DEFAULT TRUE;",
+        "ALTER TABLE merchant_voicebox ADD COLUMN IF NOT EXISTS announce_balance BOOLEAN DEFAULT TRUE;",
+    ]
+    for ddl in ddls:
+        try:
+            await db.execute(text(ddl))
+            await db.commit()
+        except Exception:
+            await db.rollback()
+    _voicebox_columns_checked = True
+
+
+async def _get_or_repair_voicebox(db: AsyncSession, user_id: uuid.UUID) -> MerchantVoiceBox | None:
+    try:
+        await _ensure_voicebox_columns(db)
+        res = await db.execute(select(MerchantVoiceBox).where(MerchantVoiceBox.user_id == user_id))
+        return res.scalar_one_or_none()
+    except Exception as exc:
+        err_str = str(exc).lower()
+        if any(w in err_str for w in ["does not exist", "undefined_column", "column", "programmingerror"]):
+            await db.rollback()
+            await _ensure_voicebox_columns(db, force=True)
+            res = await db.execute(select(MerchantVoiceBox).where(MerchantVoiceBox.user_id == user_id))
+            return res.scalar_one_or_none()
+        raise
 
 VOICEBOX_ACTIVATION_FEE_PAISE = 20_000   # ₹200 (6 months validity)
 VOICEBOX_LANG_CHANGE_FEE_PAISE = 10_000  # ₹100
@@ -192,8 +232,7 @@ async def get_voicebox_status(
     db: AsyncSession = Depends(get_db),
 ):
     """Fetch current merchant voice box subscription status."""
-    res = await db.execute(select(MerchantVoiceBox).where(MerchantVoiceBox.user_id == user.id))
-    vb = res.scalar_one_or_none()
+    vb = await _get_or_repair_voicebox(db, user.id)
 
     now = datetime.now(timezone.utc)
     is_active = False
@@ -272,8 +311,7 @@ async def activate_voicebox(
 
     # 4. Upsert MerchantVoiceBox record
     now = datetime.now(timezone.utc)
-    vb_res = await db.execute(select(MerchantVoiceBox).where(MerchantVoiceBox.user_id == user.id))
-    vb = vb_res.scalar_one_or_none()
+    vb = await _get_or_repair_voicebox(db, user.id)
     if not vb:
         vb = MerchantVoiceBox(
             user_id=user.id,
@@ -318,8 +356,7 @@ async def change_voicebox_language(
     """
     Switch Voice Box announcement language for ₹100 fee routed to rishabhraj1368@renopay.
     """
-    vb_res = await db.execute(select(MerchantVoiceBox).where(MerchantVoiceBox.user_id == user.id))
-    vb = vb_res.scalar_one_or_none()
+    vb = await _get_or_repair_voicebox(db, user.id)
     if not vb or not vb.is_active:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "No active Voice Box subscription found. Please activate first.")
 
@@ -384,8 +421,7 @@ async def renew_voicebox(
     """
     Renew Voice Box for another 6 months for ₹200 fee routed to rishabhraj1368@renopay.
     """
-    vb_res = await db.execute(select(MerchantVoiceBox).where(MerchantVoiceBox.user_id == user.id))
-    vb = vb_res.scalar_one_or_none()
+    vb = await _get_or_repair_voicebox(db, user.id)
     if not vb:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Please activate Voice Box first.")
 
@@ -442,8 +478,7 @@ async def toggle_settings(
     db: AsyncSession = Depends(get_db),
 ):
     """Toggle announcement preferences."""
-    vb_res = await db.execute(select(MerchantVoiceBox).where(MerchantVoiceBox.user_id == user.id))
-    vb = vb_res.scalar_one_or_none()
+    vb = await _get_or_repair_voicebox(db, user.id)
     if not vb:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Voice box not found")
 
@@ -467,8 +502,7 @@ async def sample_announcement(
     db: AsyncSession = Depends(get_db),
 ):
     """Generate audio text for test preview."""
-    vb_res = await db.execute(select(MerchantVoiceBox).where(MerchantVoiceBox.user_id == user.id))
-    vb = vb_res.scalar_one_or_none()
+    vb = await _get_or_repair_voicebox(db, user.id)
     lang = payload.language or (vb.language if vb else "hi")
 
     acc_res = await db.execute(select(Account).where(Account.user_id == user.id))
