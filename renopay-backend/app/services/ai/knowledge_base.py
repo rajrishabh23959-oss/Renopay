@@ -121,7 +121,7 @@ RENOPAY_DOCS = [
         "content": (
             "RenoPay supports Voice-driven UPI payments:\n"
             "1. Tap the Voice UPI icon from the Home screen.\n"
-            "2. Speak naturally, e.g., 'Pay 500 rupees to Praveen for lunch'.\n"
+            "2. Speak naturally, e.g., 'Pay 500 rupees to rishabh for lunch'.\n"
             "3. The browser extracts the recipient name, amount, and note.\n"
             "4. RenoPay resolves the contact VPA and pre-fills the payment confirmation screen for your review."
         ),

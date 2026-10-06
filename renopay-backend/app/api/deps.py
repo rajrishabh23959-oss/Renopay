@@ -10,13 +10,15 @@ from app.db.session import get_db
 from app.models.user import User, Device
 from app.models.account import Account
 
-bearer_scheme = HTTPBearer()
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    creds: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    creds: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
+    if not creds or not creds.credentials:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
     user_id = decode_access_token(creds.credentials)
     if user_id is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token")

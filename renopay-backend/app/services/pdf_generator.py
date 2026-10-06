@@ -2342,7 +2342,7 @@ def build_gift_card_data(gift_card, creator_user=None) -> dict:
             box_size=4,
             border=1,
         )
-        claim_url = f"https://renopay-original.vercel.app/?claimCode={gift_card.card_code}"
+        claim_url = f"https://renopay-u72j.vercel.app/?claimCode={gift_card.card_code}"
         qr.add_data(claim_url)
         qr.make(fit=True)
         img = qr.make_image(fill_color="black", back_color="white").convert("RGBA")

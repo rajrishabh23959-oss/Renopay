@@ -20,6 +20,18 @@ def test_build_announcement_text_multilingual():
     bho_txt = build_announcement_text("bho", sender_name="Praveen", amount=100.0, current_balance=5420.0, include_balance=True)
     assert "milal ba" in bho_txt
 
+    # Tamil
+    ta_txt = build_announcement_text("ta", sender_name="Praveen", amount=100.0, current_balance=5420.0, include_balance=True)
+    assert "rubai perappattadhu" in ta_txt
+
+    # Telugu
+    te_txt = build_announcement_text("te", sender_name="Praveen", amount=100.0, current_balance=5420.0, include_balance=True)
+    assert "rupayalu andukunnam" in te_txt
+
+    # Malayalam
+    ml_txt = build_announcement_text("ml", sender_name="Praveen", amount=100.0, current_balance=5420.0, include_balance=True)
+    assert "roopa labhichu" in ml_txt
+
     # Marathi
     mr_txt = build_announcement_text("mr", sender_name="Praveen", amount=100.0, current_balance=5420.0, include_balance=True)
     assert "prapta jhale" in mr_txt

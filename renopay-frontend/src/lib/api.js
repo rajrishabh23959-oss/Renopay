@@ -292,7 +292,7 @@ export const VoiceBoxAPI = {
   changeLanguage: (language) => http.post("/voicebox/change-language", { language }).then((r) => r.data),
   renew: () => http.post("/voicebox/renew").then((r) => r.data),
   toggleSettings: (settings) => http.post("/voicebox/toggle-settings", settings).then((r) => r.data),
-  sampleAnnouncement: (sender_name = "Praveen", amount = 100, language = null) =>
+  sampleAnnouncement: (sender_name = "rishabh", amount = 100, language = null) =>
     http.post("/voicebox/sample-announcement", { sender_name, amount, language }).then((r) => r.data),
 };
 

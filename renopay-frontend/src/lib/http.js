@@ -9,7 +9,7 @@ const isNativeApp =
 
 const BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
-  (isNativeApp ? "https://renopay-original.vercel.app/api" : "/api");
+  (isNativeApp ? "https://renopay-u72j.vercel.app/api" : "/api");
 
 export const http = axios.create({ baseURL: BASE_URL, timeout: 15000 });
 
@@ -77,7 +77,13 @@ http.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config;
-    if (error.response?.status === 401 && !original._retried) {
+    const isAuthError =
+      error.response?.status === 401 ||
+      (error.response?.status === 403 &&
+        (error.response?.data?.detail === "Not authenticated" ||
+          error.response?.data?.detail === "Invalid or expired token"));
+
+    if (isAuthError && !original._retried) {
       original._retried = true;
       const { refresh } = getTokens();
       if (!refresh) {

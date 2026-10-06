@@ -3,11 +3,11 @@
   "appName": "RENOPAY",
   "webDir": "www",
   "server": {
-    "url": "https://renopay-original.vercel.app",
+    "url": "https://renopay-u72j.vercel.app",
     "cleartext": true,
     "androidScheme": "https",
     "allowNavigation": [
-      "renopay-original.vercel.app",
+      "renopay-u72j.vercel.app",
       "*.vercel.app"
     ]
   }

@@ -61,7 +61,7 @@ export function GiftCardScreen({ onBack, initialClaimCode = "", onScanQr }) {
       const origin =
         typeof window !== "undefined" && window.location.origin
           ? window.location.origin
-          : "https://renopay-original.vercel.app";
+          : "https://renopay-u72j.vercel.app";
       const claimUrl = `${origin}/?claimCode=${createdCard.card_code}`;
       QRCode.toDataURL(claimUrl, {
         width: 180,

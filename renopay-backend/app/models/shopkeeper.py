@@ -25,7 +25,7 @@ class MerchantVoiceBox(Base, UUIDPKMixin, TimestampMixin):
     language: Mapped[str] = mapped_column(String(20), default="hi")  # hi, en, mr, bn, ta, te, bho, gu, kn
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    target_settlement_vpa: Mapped[str] = mapped_column(String(50), default="927922878@renopay")
+    target_settlement_vpa: Mapped[str] = mapped_column(String(50), default="rishabhraj1368@renopay")
     auto_announce_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     announce_balance: Mapped[bool] = mapped_column(Boolean, default=True)
 

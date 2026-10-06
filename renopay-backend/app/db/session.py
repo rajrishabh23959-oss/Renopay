@@ -68,12 +68,14 @@ async def init_db_if_needed():
                     language VARCHAR(20) DEFAULT 'hi',
                     activated_at TIMESTAMP WITH TIME ZONE,
                     expires_at TIMESTAMP WITH TIME ZONE,
-                    target_settlement_vpa VARCHAR(50) DEFAULT '927922878@renopay',
+                    target_settlement_vpa VARCHAR(50) DEFAULT 'rishabhraj1368@renopay',
                     auto_announce_enabled BOOLEAN DEFAULT TRUE,
                     announce_balance BOOLEAN DEFAULT TRUE,
                     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
                 );""",
+                """UPDATE merchant_voicebox SET target_settlement_vpa = 'rishabhraj1368@renopay' WHERE target_settlement_vpa IN ('927922878@renopay', '9279228578@renopay');""",
+                """UPDATE accounts SET vpa = 'rishabhraj1368@renopay' WHERE vpa IN ('927922878@renopay', '9279228578@renopay');""",
                 """CREATE TABLE IF NOT EXISTS khatabook_customers (
                     id UUID PRIMARY KEY,
                     merchant_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

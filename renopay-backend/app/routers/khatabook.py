@@ -382,7 +382,7 @@ async def parse_voice_entry(
     """
     Parses Hindi/English natural language speech from the mic:
     e.g. "Aaj Ramesh ko 200 rupaye diye 2 kilo chawal ke liye"
-    or "Praveen se 500 rupaye jama mile"
+    or "rishabh se 500 rupaye jama mile"
     """
     text = payload.transcript.strip()
     lower = text.lower()

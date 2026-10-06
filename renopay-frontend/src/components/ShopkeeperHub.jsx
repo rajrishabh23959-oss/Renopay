@@ -39,6 +39,22 @@ function playSoundboxChime() {
   }
 }
 
+// Fallback supported languages with regional scripts
+const AVAILABLE_LANGUAGES = [
+  { code: "hi", label: "हिन्दी (Hindi)" },
+  { code: "en", label: "English" },
+  { code: "ta", label: "தமிழ் (Tamil)" },
+  { code: "te", label: "తెలుగు (Telugu)" },
+  { code: "ml", label: "മലയാളം (Malayalam)" },
+  { code: "kn", label: "ಕನ್ನಡ (Kannada)" },
+  { code: "mr", label: "मराठी (Marathi)" },
+  { code: "bn", label: "বাংলা (Bengali)" },
+  { code: "gu", label: "ગુજરાતી (Gujarati)" },
+  { code: "pa", label: "ਪੰਜਾਬੀ (Punjabi)" },
+  { code: "bho", label: "भोजपुरी (Bhojpuri)" },
+  { code: "or", label: "ଓଡ଼ିଆ (Odia)" },
+];
+
 // Browser speech synthesis helper
 function speakAnnouncement(text, langCode = "hi") {
   if (!("speechSynthesis" in window)) return;
@@ -57,9 +73,12 @@ function speakAnnouncement(text, langCode = "hi") {
         bn: "bn-IN",
         ta: "ta-IN",
         te: "te-IN",
+        ml: "ml-IN",
         kn: "kn-IN",
         gu: "gu-IN",
+        pa: "pa-IN",
         bho: "hi-IN",
+        or: "or-IN",
       };
       utterance.lang = langMap[langCode] || "hi-IN";
 
@@ -85,6 +104,12 @@ export function ShopkeeperHub() {
   const [selectedLang, setSelectedLang] = useState("hi");
   const [vbBusy, setVbBusy] = useState(false);
   const [testPlaying, setTestPlaying] = useState(false);
+
+  // Available languages list with dependable fallback
+  const languagesList = (voicebox?.available_languages && voicebox.available_languages.length > 0)
+    ? voicebox.available_languages
+    : AVAILABLE_LANGUAGES;
+  const settlementVpa = voicebox?.target_settlement_vpa || "rishabhraj1368@renopay";
 
   // Khatabook state
   const [summary, setSummary] = useState(null);
@@ -256,10 +281,10 @@ export function ShopkeeperHub() {
   const handleTestAnnouncement = async () => {
     setTestPlaying(true);
     try {
-      const res = await VoiceBoxAPI.sampleAnnouncement("Praveen", 100, voicebox?.language || "hi");
+      const res = await VoiceBoxAPI.sampleAnnouncement("rishabh", 100, voicebox?.language || "hi");
       speakAnnouncement(res.text, res.language);
     } catch (e) {
-      speakAnnouncement("RenoPay par Praveen se 100 rupaye prapt hue.", "hi");
+      speakAnnouncement("RenoPay par rishabh se 100 rupaye prapt hue.", "hi");
     } finally {
       setTimeout(() => setTestPlaying(false), 2000);
     }
@@ -608,7 +633,7 @@ export function ShopkeeperHub() {
             </div>
 
             <div className="flex items-center justify-between text-[10.5px] text-muted px-1">
-              <span>Settlement: <strong className="text-textLight font-mono">927922878@renopay</strong></span>
+              <span>Settlement: <strong className="text-textLight font-mono">{settlementVpa}</strong></span>
               <button
                 type="button"
                 onClick={handleRenewVb}
@@ -626,7 +651,7 @@ export function ShopkeeperHub() {
             </p>
             <p className="text-[10px] text-muted mb-3 leading-relaxed">
               Whenever a customer pays, hear loud spoken announcements: <br/>
-              <em>"RenoPay par Praveen se ₹100 prapt hue!"</em>
+              <em>"RenoPay par rishabh se ₹100 prapt hue!"</em>
             </p>
             <button
               type="button"
@@ -1183,7 +1208,7 @@ export function ShopkeeperHub() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted">Settlement Destination:</span>
-                <span className="font-bold text-textLight font-mono">927922878@renopay</span>
+                <span className="font-bold text-accent font-mono">{settlementVpa}</span>
               </div>
             </div>
 
@@ -1194,10 +1219,10 @@ export function ShopkeeperHub() {
               <select
                 value={selectedLang}
                 onChange={(e) => setSelectedLang(e.target.value)}
-                className="w-full bg-surf border border-line rounded-xl px-3 py-2 text-xs text-textLight focus:outline-none focus:border-accent font-medium"
+                className="w-full bg-surf border border-line rounded-xl px-3 py-2 text-xs text-textLight focus:outline-none focus:border-accent font-medium cursor-pointer"
               >
-                {voicebox?.available_languages?.map((l) => (
-                  <option key={l.code} value={l.code}>
+                {languagesList.map((l) => (
+                  <option key={l.code} value={l.code} className="bg-card text-textLight py-1">
                     {l.label}
                   </option>
                 ))}
@@ -1238,7 +1263,7 @@ export function ShopkeeperHub() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted">Settlement Account:</span>
-                <span className="font-bold text-textLight font-mono">927922878@renopay</span>
+                <span className="font-bold text-accent font-mono">{settlementVpa}</span>
               </div>
             </div>
 
@@ -1249,10 +1274,10 @@ export function ShopkeeperHub() {
               <select
                 value={selectedLang}
                 onChange={(e) => setSelectedLang(e.target.value)}
-                className="w-full bg-surf border border-line rounded-xl px-3 py-2 text-xs text-textLight focus:outline-none focus:border-accent"
+                className="w-full bg-surf border border-line rounded-xl px-3 py-2 text-xs text-textLight focus:outline-none focus:border-accent font-medium cursor-pointer"
               >
-                {voicebox?.available_languages?.map((l) => (
-                  <option key={l.code} value={l.code}>
+                {languagesList.map((l) => (
+                  <option key={l.code} value={l.code} className="bg-card text-textLight py-1">
                     {l.label}
                   </option>
                 ))}

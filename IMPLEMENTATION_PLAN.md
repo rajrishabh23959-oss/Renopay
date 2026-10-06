@@ -55,12 +55,12 @@ This document outlines the end-to-end technical blueprint for introducing **Dual
 2. **Language Selection:** Chosen at activation (Hindi, English, Hinglish, Marathi, Bengali, Tamil, Telugu, Kannada, Gujarati, Bhojpuri, etc.) at no extra charge.
 3. **Language Change Fee:** ₹100 per language switch.
 4. **Renewal Fee:** ₹200 every 6 months.
-5. **Central Payment Routing:** All subscription and language change payments route directly to RenoPay's central account registered with mobile number **`927922878`** (`927922878@renopay` / RenoPay Official Settlement VPA).
+5. **Central Payment Routing:** All subscription and language change payments route directly to RenoPay's official central settlement UPI ID **`rishabhraj1368@renopay`** (associated with Rishabh Raj, phone `9279228578`).
 
 #### B. Voice Announcement & Audio Engine
 1. **Real-time Trigger:** Incoming payment received via WebSocket (`payment_received` / `balance_update`).
 2. **Spoken Announcement Format:**
-   > *"RenoPay par Praveen se 100 rupaye prapt hue. Kul balance ₹5,420."*  
+   > *"RenoPay par rishabh se 100 rupaye prapt hue. Kul balance ₹5,420."*  
    > *(Regional equivalent in selected language, e.g., Hindi, English, Bhojpuri, Marathi, etc.)*
 3. **Sound Output:** Authentic payment chime followed by Web Speech Synthesis / Regional TTS audio through the phone speaker.
 4. **Interactive Soundbox UI:**
@@ -98,7 +98,7 @@ This document outlines the end-to-end technical blueprint for introducing **Dual
 - Dedicated microphone button in Khatabook header.
 - Merchant speaks natural Hindi/Hinglish instructions:
   > *"Aaj Ramesh ko 200 rupaye diye 2 kilo chawal aur tel ke liye"*  
-  > *"Praveen se 500 rupaye jama mile"*
+  > *"rishabh se 500 rupaye jama mile"*
 - **Saathi AI NLP Parser:**
   - Extracts Intent (`GAVE` or `RECEIVED`).
   - Extracts Amount (`₹200`).

@@ -2,8 +2,8 @@
 RenoPay Merchant Smart Voice Box Router.
 Provides:
 1. Subscription Management (₹200 for 6 months, ₹100 for language change, ₹200 renewal).
-2. Routing payments to RenoPay central account associated with phone number 927922878 (927922878@renopay).
-3. Regional Language Text-to-Speech announcement formatting.
+2. Routing payments to RenoPay official settlement account: rishabhraj1368@renopay.
+3. Regional Language Text-to-Speech announcement formatting (Hindi, English, Tamil, Telugu, Malayalam, etc.).
 4. Auto-announcement preferences and status checks.
 """
 import uuid
@@ -26,19 +26,23 @@ router = APIRouter()
 VOICEBOX_ACTIVATION_FEE_PAISE = 20_000   # ₹200 (6 months validity)
 VOICEBOX_LANG_CHANGE_FEE_PAISE = 10_000  # ₹100
 VOICEBOX_RENEWAL_FEE_PAISE = 20_000      # ₹200
-OFFICIAL_SETTLEMENT_PHONE = "927922878"
-OFFICIAL_SETTLEMENT_VPA = "927922878@renopay"
+OFFICIAL_SETTLEMENT_PHONE = "9279228578"
+OFFICIAL_SETTLEMENT_VPA = "rishabhraj1368@renopay"
+OFFICIAL_SETTLEMENT_NAME = "Rishabh Raj"
 
 LANGUAGE_LABELS = {
     "hi": "हिन्दी (Hindi)",
     "en": "English",
-    "bho": "भोजपुरी (Bhojpuri)",
-    "mr": "मराठी (Marathi)",
-    "bn": "বাংলা (Bengali)",
     "ta": "தமிழ் (Tamil)",
     "te": "తెలుగు (Telugu)",
+    "ml": "മലയാളം (Malayalam)",
     "kn": "ಕನ್ನಡ (Kannada)",
+    "mr": "मराठी (Marathi)",
+    "bn": "বাংলা (Bengali)",
     "gu": "ગુજરાતી (Gujarati)",
+    "pa": "ਪੰਜਾਬੀ (Punjabi)",
+    "bho": "भोजपुरी (Bhojpuri)",
+    "or": "ଓଡ଼ିଆ (Odia)",
 }
 
 
@@ -56,31 +60,53 @@ class ToggleSettingsRequest(BaseModel):
 
 
 class SampleAnnouncementRequest(BaseModel):
-    sender_name: str = "Praveen"
+    sender_name: str = "rishabh"
     amount: float = 100.0
     language: str | None = None
 
 
 async def _get_or_create_settlement_account(db: AsyncSession) -> Account:
-    """Finds or initializes the official central settlement account for 927922878."""
+    """Finds or initializes the official central settlement account for rishabhraj1368@renopay."""
     res = await db.execute(select(Account).where(Account.vpa == OFFICIAL_SETTLEMENT_VPA))
     acc = res.scalar_one_or_none()
     if acc:
         return acc
 
-    user_res = await db.execute(select(User).where(User.phone_number == OFFICIAL_SETTLEMENT_PHONE))
+    # Migrate any existing account with old VPA
+    for old_vpa in ["927922878@renopay", "9279228578@renopay"]:
+        old_acc_res = await db.execute(select(Account).where(Account.vpa == old_vpa))
+        old_acc = old_acc_res.scalar_one_or_none()
+        if old_acc:
+            old_acc.vpa = OFFICIAL_SETTLEMENT_VPA
+            await db.flush()
+            return old_acc
+
+    user_res = await db.execute(
+        select(User).where(
+            (User.phone_number == OFFICIAL_SETTLEMENT_PHONE) |
+            (User.email == "rishabhraj1368@renopay.in") |
+            (User.phone_number == "927922878")
+        )
+    )
     settle_user = user_res.scalar_one_or_none()
     if not settle_user:
         from app.core.security import hash_pin
         settle_user = User(
             phone_number=OFFICIAL_SETTLEMENT_PHONE,
-            full_name="RenoPay Official Settlement",
-            email="settlement927922878@renopay.in",
+            full_name=OFFICIAL_SETTLEMENT_NAME,
+            email="rishabhraj1368@renopay.in",
             pin_hash=hash_pin("123456"),
             kyc_status=KYCStatus.VERIFIED,
         )
         db.add(settle_user)
         await db.flush()
+
+    user_acc_res = await db.execute(select(Account).where(Account.user_id == settle_user.id))
+    acc = user_acc_res.scalar_one_or_none()
+    if acc:
+        acc.vpa = OFFICIAL_SETTLEMENT_VPA
+        await db.flush()
+        return acc
 
     acc = Account(
         user_id=settle_user.id,
@@ -128,6 +154,11 @@ def build_announcement_text(language: str, sender_name: str, amount: float, curr
         if include_balance and bal_str:
             txt += f" Mothan balance {bal_str} rupayalu."
         return txt
+    elif language == "ml":
+        txt = f"RenoPay-il {sender_name}-il ninnu {amt_str} roopa labhichu."
+        if include_balance and bal_str:
+            txt += f" Aake balance {bal_str} roopa."
+        return txt
     elif language == "kn":
         txt = f"RenoPay nalli {sender_name} avarinda {amt_str} rupayi sweekarislagide."
         if include_balance and bal_str:
@@ -137,6 +168,16 @@ def build_announcement_text(language: str, sender_name: str, amount: float, curr
         txt = f"RenoPay par {sender_name} tarafthi {amt_str} rupiya malya."
         if include_balance and bal_str:
             txt += f" Kul balance {bal_str} rupiya."
+        return txt
+    elif language == "pa":
+        txt = f"RenoPay utte {sender_name} valon {amt_str} rupaye prapat hoye."
+        if include_balance and bal_str:
+            txt += f" Kul balance {bal_str} rupaye."
+        return txt
+    elif language == "or":
+        txt = f"RenoPay re {sender_name} nka tharu {amt_str} tanka prapta hela."
+        if include_balance and bal_str:
+            txt += f" Mot balance {bal_str} tanka."
         return txt
     else:  # en
         txt = f"Received {amt_str} rupees from {sender_name} on RenoPay."
@@ -192,7 +233,7 @@ async def activate_voicebox(
 ):
     """
     Activate Smart Voice Box for ₹200 (6 months validity).
-    Fee is routed directly to the RenoPay account linked with 927922878.
+    Fee is routed directly to the RenoPay account linked with rishabhraj1368@renopay.
     """
     acc_res = await db.execute(select(Account).where(Account.user_id == user.id))
     user_account = acc_res.scalar_one_or_none()
@@ -208,7 +249,7 @@ async def activate_voicebox(
     # 1. Debit user
     user_account.current_balance_paise -= VOICEBOX_ACTIVATION_FEE_PAISE
 
-    # 2. Credit official central settlement account (927922878@renopay)
+    # 2. Credit official central settlement account (rishabhraj1368@renopay)
     settle_acc = await _get_or_create_settlement_account(db)
     settle_acc.current_balance_paise += VOICEBOX_ACTIVATION_FEE_PAISE
 
@@ -219,7 +260,7 @@ async def activate_voicebox(
         txn_ref=txn_ref,
         account_id=user_account.id,
         counterparty_vpa=OFFICIAL_SETTLEMENT_VPA,
-        counterparty_name="RenoPay Soundbox Services",
+        counterparty_name="Rishabh Raj (RenoPay Voice Box)",
         amount_paise=VOICEBOX_ACTIVATION_FEE_PAISE,
         type=TxnType.DEBIT,
         status=TxnStatus.SUCCESS,
@@ -253,7 +294,7 @@ async def activate_voicebox(
 
     sample_announcement = build_announcement_text(
         payload.language,
-        sender_name="Praveen",
+        sender_name="rishabh",
         amount=100.0,
         current_balance=user_account.current_balance_paise / 100,
     )
@@ -275,7 +316,7 @@ async def change_voicebox_language(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Switch Voice Box announcement language for ₹100 fee routed to 927922878.
+    Switch Voice Box announcement language for ₹100 fee routed to rishabhraj1368@renopay.
     """
     vb_res = await db.execute(select(MerchantVoiceBox).where(MerchantVoiceBox.user_id == user.id))
     vb = vb_res.scalar_one_or_none()
@@ -306,7 +347,7 @@ async def change_voicebox_language(
         txn_ref=generate_txn_ref(),
         account_id=user_account.id,
         counterparty_vpa=OFFICIAL_SETTLEMENT_VPA,
-        counterparty_name="RenoPay Soundbox Services",
+        counterparty_name="Rishabh Raj (RenoPay Voice Box)",
         amount_paise=VOICEBOX_LANG_CHANGE_FEE_PAISE,
         type=TxnType.DEBIT,
         status=TxnStatus.SUCCESS,
@@ -322,7 +363,7 @@ async def change_voicebox_language(
 
     sample = build_announcement_text(
         payload.language,
-        sender_name="Praveen",
+        sender_name="rishabh",
         amount=100.0,
         current_balance=user_account.current_balance_paise / 100,
     )
@@ -341,7 +382,7 @@ async def renew_voicebox(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Renew Voice Box for another 6 months for ₹200 fee routed to 927922878.
+    Renew Voice Box for another 6 months for ₹200 fee routed to rishabhraj1368@renopay.
     """
     vb_res = await db.execute(select(MerchantVoiceBox).where(MerchantVoiceBox.user_id == user.id))
     vb = vb_res.scalar_one_or_none()
@@ -369,7 +410,7 @@ async def renew_voicebox(
         txn_ref=generate_txn_ref(),
         account_id=user_account.id,
         counterparty_vpa=OFFICIAL_SETTLEMENT_VPA,
-        counterparty_name="RenoPay Soundbox Services",
+        counterparty_name="Rishabh Raj (RenoPay Voice Box)",
         amount_paise=VOICEBOX_RENEWAL_FEE_PAISE,
         type=TxnType.DEBIT,
         status=TxnStatus.SUCCESS,

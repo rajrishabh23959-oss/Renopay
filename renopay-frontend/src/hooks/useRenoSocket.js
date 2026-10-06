@@ -8,6 +8,7 @@ import { useEffect, useRef, useCallback } from "react";
 export function useRenoSocket(onEvent) {
   const wsRef = useRef(null);
   const retryDelay = useRef(1000);
+  const failureCount = useRef(0);
   const handlerRef = useRef(onEvent);
   const timeoutRef = useRef(null);
   handlerRef.current = onEvent;
@@ -23,32 +24,58 @@ export function useRenoSocket(onEvent) {
         window.location.protocol === "file:" ||
         (window.location.hostname === "localhost" && !window.location.port));
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const defaultHost = isNativeApp ? "renopay-original.vercel.app" : window.location.host;
-    const wsUrl = import.meta.env.VITE_WS_URL || `${isNativeApp ? "wss:" : protocol}//${defaultHost}/ws`;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+    const isVercelHost =
+      typeof window !== "undefined" &&
+      (window.location.hostname.endsWith(".vercel.app") ||
+        (isNativeApp && "renopay-u72j.vercel.app".endsWith(".vercel.app")));
 
-    ws.onopen = () => {
-      retryDelay.current = 1000;
-      ws.send(JSON.stringify({ type: "auth", token }));
-    };
-    ws.onmessage = (evt) => {
-      try {
-        const parsed = JSON.parse(evt.data);
-        handlerRef.current?.(parsed);
-      } catch { /* ignore malformed frames */ }
-    };
-    ws.onclose = () => {
-      timeoutRef.current = setTimeout(connect, retryDelay.current);
-      retryDelay.current = Math.min(retryDelay.current * 2, 30000);
-    };
-    ws.onerror = () => ws.close();
+    // Vercel serverless functions do not host persistent WebSockets without an external VITE_WS_URL gateway
+    if (!import.meta.env.VITE_WS_URL && isVercelHost) {
+      return;
+    }
+
+    if (failureCount.current >= 3) {
+      return;
+    }
+
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const defaultHost = isNativeApp ? "renopay-u72j.vercel.app" : window.location.host;
+    const wsUrl = import.meta.env.VITE_WS_URL || `${isNativeApp ? "wss:" : protocol}//${defaultHost}/ws`;
+
+    try {
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        failureCount.current = 0;
+        retryDelay.current = 1000;
+        ws.send(JSON.stringify({ type: "auth", token }));
+      };
+      ws.onmessage = (evt) => {
+        try {
+          const parsed = JSON.parse(evt.data);
+          handlerRef.current?.(parsed);
+        } catch { /* ignore malformed frames */ }
+      };
+      ws.onclose = () => {
+        failureCount.current += 1;
+        if (failureCount.current < 3) {
+          timeoutRef.current = setTimeout(connect, retryDelay.current);
+          retryDelay.current = Math.min(retryDelay.current * 2, 30000);
+        }
+      };
+      ws.onerror = () => {
+        ws.close();
+      };
+    } catch {
+      failureCount.current += 1;
+    }
   }, []);
 
   useEffect(() => {
     connect();
     const handleOnline = () => {
+      failureCount.current = 0;
       retryDelay.current = 1000;
       connect();
     };
