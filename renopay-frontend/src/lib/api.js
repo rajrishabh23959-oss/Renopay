@@ -288,10 +288,12 @@ export const FinancialAPI = {
 // ---------- Merchant Voice Box (Soundbox) ----------
 export const VoiceBoxAPI = {
   getStatus: () => http.get("/voicebox/status").then((r) => r.data),
-  activate: (language = "hi") => http.post("/voicebox/activate", { language }).then((r) => r.data),
-  changeLanguage: (language) => http.post("/voicebox/change-language", { language }).then((r) => r.data),
-  renew: () => http.post("/voicebox/renew").then((r) => r.data),
+  activate: (language = "hi", pin = null) => http.post("/voicebox/activate", { language, pin }).then((r) => r.data),
+  changeLanguage: (language, pin = null) => http.post("/voicebox/change-language", { language, pin }).then((r) => r.data),
+  renew: (pin = null) => http.post("/voicebox/renew", { pin }).then((r) => r.data),
   toggleSettings: (settings) => http.post("/voicebox/toggle-settings", settings).then((r) => r.data),
+  pollAnnouncements: (since_txn_ref = null) =>
+    http.get("/voicebox/announcements/poll", { params: since_txn_ref ? { since_txn_ref } : {} }).then((r) => r.data),
   sampleAnnouncement: (sender_name = "rishabh", amount = 100, language = null) =>
     http.post("/voicebox/sample-announcement", { sender_name, amount, language }).then((r) => r.data),
 };

@@ -308,6 +308,7 @@ async def send_money(
         txn_ref=txn_ref,
         account_id=sender_account.id,
         counterparty_vpa=receiver_account.vpa,
+        counterparty_name=receiver_name or receiver_account.vpa or "Merchant",
         type=TxnType.DEBIT,
         status=TxnStatus.SUCCESS,
         category=category,
@@ -323,6 +324,7 @@ async def send_money(
         txn_ref=generate_txn_ref(),
         account_id=receiver_account.id,
         counterparty_vpa=sender_account.vpa,
+        counterparty_name=sender_user.full_name or sender_account.vpa or "Customer",
         type=TxnType.CREDIT,
         status=TxnStatus.SUCCESS,
         category=TxnCategory.INCOME,
@@ -419,31 +421,27 @@ async def send_money(
 
     # --- Real-Time Voice Box Audio Announcement for Receiver Merchant ---
     try:
-        from app.models.shopkeeper import MerchantVoiceBox
-        from app.routers.voicebox import build_announcement_text
-        vb_res = await db.execute(
-            select(MerchantVoiceBox).where(
-                MerchantVoiceBox.user_id == receiver_account.user_id,
-                MerchantVoiceBox.is_active == True,
-            )
-        )
-        vb = vb_res.scalar_one_or_none()
-        if vb and vb.expires_at and vb.expires_at > now:
-            voice_text = build_announcement_text(
-                vb.language,
-                sender_name=sender_user.full_name or "Customer",
-                amount=amount_paise / 100,
-                current_balance=receiver_account.current_balance_paise / 100,
-                include_balance=vb.announce_balance,
-            )
-            await ws_manager.push(receiver_account.user_id, "voicebox_announcement", {
-                "text": voice_text,
-                "amount": amount_paise / 100,
-                "sender_name": sender_user.full_name or "Customer",
-                "language": vb.language,
-                "balance": receiver_account.current_balance_paise / 100,
-                "txn_ref": txn_ref,
-            })
+        from app.routers.voicebox import build_announcement_text, _get_or_repair_voicebox
+        vb = await _get_or_repair_voicebox(db, receiver_account.user_id)
+        if vb and vb.is_active:
+            exp = vb.expires_at.replace(tzinfo=timezone.utc) if vb.expires_at and vb.expires_at.tzinfo is None else vb.expires_at
+            if not exp or exp > datetime.now(timezone.utc):
+                sender_display_name = sender_user.full_name or "Customer"
+                voice_text = build_announcement_text(
+                    vb.language,
+                    sender_name=sender_display_name,
+                    amount=amount_paise / 100,
+                    current_balance=receiver_account.current_balance_paise / 100,
+                    include_balance=vb.announce_balance,
+                )
+                await ws_manager.push(receiver_account.user_id, "voicebox_announcement", {
+                    "text": voice_text,
+                    "amount": amount_paise / 100,
+                    "sender_name": sender_display_name,
+                    "language": vb.language,
+                    "balance": receiver_account.current_balance_paise / 100,
+                    "txn_ref": txn_ref,
+                })
     except Exception as e:
         logger.warning(f"Voicebox trigger notice: {e}")
 

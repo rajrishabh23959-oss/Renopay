@@ -6,38 +6,12 @@ import { useAuth } from "../context/AuthContext";
 import { useRenoSocket } from "../hooks/useRenoSocket";
 import { PdfPreviewModal } from "./PdfPreviewModal";
 import { downloadOrSharePdf } from "../lib/download";
-
-// Web Audio soundbox chime generator
-function playSoundboxChime() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const now = ctx.currentTime;
-
-    const osc1 = ctx.createOscillator();
-    const gain1 = ctx.createGain();
-    osc1.type = "sine";
-    osc1.frequency.setValueAtTime(587.33, now); // D5
-    gain1.gain.setValueAtTime(0.25, now);
-    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-    osc1.connect(gain1);
-    gain1.connect(ctx.destination);
-    osc1.start(now);
-    osc1.stop(now + 0.35);
-
-    const osc2 = ctx.createOscillator();
-    const gain2 = ctx.createGain();
-    osc2.type = "sine";
-    osc2.frequency.setValueAtTime(880.00, now + 0.15); // A5
-    gain2.gain.setValueAtTime(0.28, now + 0.15);
-    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
-    osc2.connect(gain2);
-    gain2.connect(ctx.destination);
-    osc2.start(now + 0.15);
-    osc2.stop(now + 0.55);
-  } catch (e) {
-    console.warn("Audio chime error:", e);
-  }
-}
+import { PINPad } from "./PINPad";
+import {
+  speakAnnouncement,
+  playSoundboxChime,
+  useVoiceBoxAnnouncer,
+} from "../hooks/useVoiceBoxAnnouncer";
 
 // Fallback supported languages with regional scripts
 const AVAILABLE_LANGUAGES = [
@@ -54,44 +28,6 @@ const AVAILABLE_LANGUAGES = [
   { code: "bho", label: "भोजपुरी (Bhojpuri)" },
   { code: "or", label: "ଓଡ଼ିଆ (Odia)" },
 ];
-
-// Browser speech synthesis helper
-function speakAnnouncement(text, langCode = "hi") {
-  if (!("speechSynthesis" in window)) return;
-  try {
-    window.speechSynthesis.cancel();
-    playSoundboxChime();
-    setTimeout(() => {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.95;
-      utterance.pitch = 1.05;
-
-      const langMap = {
-        hi: "hi-IN",
-        en: "en-IN",
-        mr: "mr-IN",
-        bn: "bn-IN",
-        ta: "ta-IN",
-        te: "te-IN",
-        ml: "ml-IN",
-        kn: "kn-IN",
-        gu: "gu-IN",
-        pa: "pa-IN",
-        bho: "hi-IN",
-        or: "or-IN",
-      };
-      utterance.lang = langMap[langCode] || "hi-IN";
-
-      const voices = window.speechSynthesis.getVoices();
-      const match = voices.find((v) => v.lang.startsWith(utterance.lang.slice(0, 2)));
-      if (match) utterance.voice = match;
-
-      window.speechSynthesis.speak(utterance);
-    }, 400);
-  } catch (e) {
-    console.warn("TTS error:", e);
-  }
-}
 
 export function ShopkeeperHub() {
   const { profile } = useAuth();
@@ -231,47 +167,71 @@ export function ShopkeeperHub() {
     }
   });
 
-  // Activate Voice Box (₹200)
-  const handleActivateVb = async () => {
-    setVbBusy(true);
-    try {
-      const res = await VoiceBoxAPI.activate(selectedLang);
-      showToast(res.message);
-      setActivateModalOpen(false);
-      await loadVoicebox();
-      speakAnnouncement(res.sample_announcement, selectedLang);
-    } catch (e) {
-      showToast(e.response?.data?.detail || "Voice Box activation failed", "error");
-    } finally {
-      setVbBusy(false);
-    }
+  // PIN Modal state for Voice Box payments
+  const [pinModal, setPinModal] = useState({
+    open: false,
+    title: "",
+    amount: 0,
+    action: null, // "activate" | "change_lang" | "renew"
+  });
+
+  const handleOpenActivatePin = () => {
+    setActivateModalOpen(false);
+    setPinModal({
+      open: true,
+      title: "Activate Voice Box (6 Months)",
+      amount: 200,
+      action: "activate",
+    });
   };
 
-  // Change Language (₹100)
-  const handleChangeLang = async () => {
-    setVbBusy(true);
-    try {
-      const res = await VoiceBoxAPI.changeLanguage(selectedLang);
-      showToast(res.message);
-      setChangeLangModalOpen(false);
-      await loadVoicebox();
-      speakAnnouncement(res.sample_announcement, selectedLang);
-    } catch (e) {
-      showToast(e.response?.data?.detail || "Language change failed", "error");
-    } finally {
-      setVbBusy(false);
-    }
+  const handleOpenChangeLangPin = () => {
+    setChangeLangModalOpen(false);
+    setPinModal({
+      open: true,
+      title: "Switch Regional Voice",
+      amount: 100,
+      action: "change_lang",
+    });
   };
 
-  // Renew Voice Box (₹200)
-  const handleRenewVb = async () => {
+  const handleOpenRenewPin = () => {
+    setPinModal({
+      open: true,
+      title: "Renew Voice Box (6 Months)",
+      amount: 200,
+      action: "renew",
+    });
+  };
+
+  const handlePinSubmit = async (pin) => {
+    if (!pin || pin.length !== 6) {
+      showToast("Please enter a valid 6-digit UPI PIN", "error");
+      return;
+    }
     setVbBusy(true);
     try {
-      const res = await VoiceBoxAPI.renew();
-      showToast(res.message);
-      await loadVoicebox();
+      if (pinModal.action === "activate") {
+        const res = await VoiceBoxAPI.activate(selectedLang, pin);
+        showToast(res.message);
+        setPinModal({ open: false, title: "", amount: 0, action: null });
+        await loadVoicebox();
+        speakAnnouncement(res.sample_announcement, selectedLang);
+      } else if (pinModal.action === "change_lang") {
+        const res = await VoiceBoxAPI.changeLanguage(selectedLang, pin);
+        showToast(res.message);
+        setPinModal({ open: false, title: "", amount: 0, action: null });
+        await loadVoicebox();
+        speakAnnouncement(res.sample_announcement, selectedLang);
+      } else if (pinModal.action === "renew") {
+        const res = await VoiceBoxAPI.renew(pin);
+        showToast(res.message);
+        setPinModal({ open: false, title: "", amount: 0, action: null });
+        await loadVoicebox();
+      }
     } catch (e) {
-      showToast(e.response?.data?.detail || "Renewal failed", "error");
+      const errMsg = e.response?.data?.detail || "Transaction failed. Please check your UPI PIN.";
+      showToast(errMsg, "error");
     } finally {
       setVbBusy(false);
     }
@@ -636,7 +596,7 @@ export function ShopkeeperHub() {
               <span>Settlement: <strong className="text-textLight font-mono">{settlementVpa}</strong></span>
               <button
                 type="button"
-                onClick={handleRenewVb}
+                onClick={handleOpenRenewPin}
                 disabled={vbBusy}
                 className="text-accent font-bold hover:underline cursor-pointer"
               >
@@ -1231,11 +1191,12 @@ export function ShopkeeperHub() {
 
             <button
               type="button"
-              onClick={handleActivateVb}
+              onClick={handleOpenActivatePin}
               disabled={vbBusy}
-              className="w-full py-2.5 rounded-xl font-bold text-xs bg-accent text-white shadow-accentGlow hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+              className="w-full py-2.5 rounded-xl font-bold text-xs bg-accent text-white shadow-accentGlow hover:brightness-110 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5"
             >
-              {vbBusy ? "Processing Payment..." : "Pay ₹200 & Activate"}
+              <span>Proceed to Pay ₹200 (Enter UPI PIN)</span>
+              <span>➔</span>
             </button>
           </div>
         </div>
@@ -1286,11 +1247,12 @@ export function ShopkeeperHub() {
 
             <button
               type="button"
-              onClick={handleChangeLang}
+              onClick={handleOpenChangeLangPin}
               disabled={vbBusy}
-              className="w-full py-2.5 rounded-xl font-bold text-xs bg-accent text-white shadow-sm hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+              className="w-full py-2.5 rounded-xl font-bold text-xs bg-accent text-white shadow-sm hover:brightness-110 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5"
             >
-              {vbBusy ? "Processing..." : "Pay ₹100 & Change Language"}
+              <span>Proceed to Pay ₹100 (Enter UPI PIN)</span>
+              <span>➔</span>
             </button>
           </div>
         </div>
@@ -1305,6 +1267,46 @@ export function ShopkeeperHub() {
         filename={previewFilename}
         isLoading={pdfLoading}
       />
+
+      {/* ── 11. VOICE BOX UPI PINPAD MODAL ─────────────────────────────────── */}
+      {pinModal.open && (
+        <div className="fixed inset-0 z-[180] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-card border border-accent/40 rounded-3xl w-full max-w-[360px] p-5 shadow-2xl animate-scaleUp">
+            <div className="flex justify-between items-center mb-3">
+              <div>
+                <h3 className="text-sm font-extrabold text-textLight">{pinModal.title}</h3>
+                <p className="text-[10px] text-muted">UPI PIN Security Authorization</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPinModal({ open: false, title: "", amount: 0, action: null })}
+                className="text-muted hover:text-white text-sm cursor-pointer p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="bg-surf/80 border border-line rounded-xl p-2.5 mb-3 text-xs flex justify-between items-center">
+              <div>
+                <span className="text-[9px] uppercase font-bold text-muted block">Fee to Deduct</span>
+                <span className="font-extrabold text-accent font-mono text-sm">₹{pinModal.amount}</span>
+              </div>
+              <div className="text-right">
+                <span className="text-[9px] uppercase font-bold text-muted block">Settlement VPA</span>
+                <span className="font-mono text-[11px] text-textLight font-semibold">{settlementVpa}</span>
+              </div>
+            </div>
+
+            <PINPad
+              onComplete={handlePinSubmit}
+              label={`Enter 6-digit UPI PIN to Pay ₹${pinModal.amount}`}
+              actionLabel={vbBusy ? "Processing..." : `Pay ₹${pinModal.amount}`}
+              loading={vbBusy}
+              accent="#FF6A1A"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -92,10 +92,16 @@ LANGUAGE_LABELS = {
 
 class ActivateVoiceBoxRequest(BaseModel):
     language: str = Field(default="hi", description="Language code e.g. hi, en, mr, etc.")
+    pin: str | None = Field(default=None, description="6-digit UPI PIN")
 
 
 class ChangeLanguageRequest(BaseModel):
     language: str = Field(min_length=2, description="Target language code")
+    pin: str | None = Field(default=None, description="6-digit UPI PIN")
+
+
+class RenewVoiceBoxRequest(BaseModel):
+    pin: str | None = Field(default=None, description="6-digit UPI PIN")
 
 
 class ToggleSettingsRequest(BaseModel):
@@ -283,6 +289,14 @@ async def activate_voicebox(
     if not user_account:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User account not found")
 
+    # Verify 6-digit UPI PIN using canonical auth with lockout
+    if user.pin_hash:
+        try:
+            from app.services.pin_auth import verify_user_pin, PinError
+            await verify_user_pin(db, user, payload.pin if payload else None)
+        except PinError as pe:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, pe.message)
+
     if user_account.current_balance_paise < VOICEBOX_ACTIVATION_FEE_PAISE:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
@@ -413,6 +427,14 @@ async def change_voicebox_language(
     if vb.language == payload.language:
         return {"success": True, "message": "Voice Box is already set to this language.", "language": vb.language}
 
+    # Verify 6-digit UPI PIN using canonical auth with lockout
+    if user.pin_hash:
+        try:
+            from app.services.pin_auth import verify_user_pin, PinError
+            await verify_user_pin(db, user, payload.pin if payload else None)
+        except PinError as pe:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, pe.message)
+
     acc_res = await db.execute(select(Account).where(Account.user_id == user.id))
     user_account = acc_res.scalar_one_or_none()
     if not user_account or user_account.current_balance_paise < VOICEBOX_LANG_CHANGE_FEE_PAISE:
@@ -465,6 +487,7 @@ async def change_voicebox_language(
 
 @router.post("/renew")
 async def renew_voicebox(
+    payload: RenewVoiceBoxRequest | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -474,6 +497,14 @@ async def renew_voicebox(
     vb = await _get_or_repair_voicebox(db, user.id)
     if not vb:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Please activate Voice Box first.")
+
+    # Verify 6-digit UPI PIN using canonical auth with lockout
+    if user.pin_hash:
+        try:
+            from app.services.pin_auth import verify_user_pin, PinError
+            await verify_user_pin(db, user, payload.pin if payload else None)
+        except PinError as pe:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, pe.message)
 
     acc_res = await db.execute(select(Account).where(Account.user_id == user.id))
     user_account = acc_res.scalar_one_or_none()
@@ -571,3 +602,73 @@ async def sample_announcement(
         "language": lang,
         "text": announcement_text,
     }
+
+
+@router.get("/announcements/poll")
+async def poll_announcements(
+    since_txn_ref: str | None = None,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Real-time polling endpoint for Voice Box announcements.
+    Guarantees audio announcement plays when payment is received even on serverless/Vercel where WebSockets disconnect.
+    """
+    vb = await _get_or_repair_voicebox(db, user.id)
+    if not vb or not vb.is_active:
+        return {"announcements": []}
+
+    now = datetime.now(timezone.utc)
+    if vb.expires_at:
+        exp = vb.expires_at.replace(tzinfo=timezone.utc) if vb.expires_at.tzinfo is None else vb.expires_at
+        if exp < now:
+            return {"announcements": []}
+
+    acc_res = await db.execute(select(Account).where(Account.user_id == user.id))
+    acc = acc_res.scalar_one_or_none()
+    if not acc:
+        return {"announcements": []}
+
+    # Fetch recent credit transactions for this merchant account within the last 15 minutes
+    cutoff = now - timedelta(minutes=15)
+    query = (
+        select(Transaction)
+        .where(
+            Transaction.account_id == acc.id,
+            Transaction.type == TxnType.CREDIT,
+            Transaction.status == TxnStatus.SUCCESS,
+            Transaction.created_at >= cutoff,
+        )
+        .order_by(Transaction.created_at.desc())
+        .limit(10)
+    )
+    res = await db.execute(query)
+    txns = res.scalars().all()
+
+    announcements = []
+    for txn in txns:
+        if since_txn_ref and txn.txn_ref == since_txn_ref:
+            break
+        text = build_announcement_text(
+            vb.language,
+            sender_name=txn.counterparty_name or "Customer",
+            amount=txn.amount_paise / 100,
+            current_balance=acc.current_balance_paise / 100,
+            include_balance=vb.announce_balance,
+        )
+        announcements.append({
+            "txn_ref": txn.txn_ref,
+            "text": text,
+            "amount": txn.amount_paise / 100,
+            "sender_name": txn.counterparty_name or "Customer",
+            "language": vb.language,
+            "balance": acc.current_balance_paise / 100,
+            "created_at": txn.created_at.isoformat() if txn.created_at else None,
+        })
+
+    return {
+        "announcements": announcements,
+        "language": vb.language,
+        "auto_announce_enabled": vb.auto_announce_enabled,
+    }
+

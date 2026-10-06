@@ -4,6 +4,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { Nav } from "./components/Nav";
 import { AIAssistant } from "./components/AIAssistant";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { useVoiceBoxAnnouncer } from "./hooks/useVoiceBoxAnnouncer";
 
 // Immediate core screens loaded synchronously
 import { LoginScreen } from "./screens/LoginScreen";
@@ -43,6 +44,15 @@ function AppShell() {
   const [loansPrefillTab, setLoansPrefillTab] = useState("personal");
   const [scanInitialMode, setScanInitialMode] = useState("camera");
   const [giftCardPrefillCode, setGiftCardPrefillCode] = useState("");
+  const [voiceToast, setVoiceToast] = useState(null);
+
+  // Global Voice Box announcement listener & audio announcer
+  useVoiceBoxAnnouncer((ann) => {
+    if (ann?.text) {
+      setVoiceToast(ann.text);
+      setTimeout(() => setVoiceToast(null), 6000);
+    }
+  });
 
   // Universal Deep Link & QR Code Scanner detection (?claimCode=RENO-GIFT-...)
   useEffect(() => {
@@ -184,6 +194,22 @@ function AppShell() {
           />
         )}
       </Suspense>
+      {voiceToast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] max-w-[90%] w-full bg-card/95 border-2 border-accent text-white px-4 py-3 rounded-2xl shadow-accentGlow flex items-center gap-3 animate-slideDown">
+          <span className="text-2xl animate-bounce">📢</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] uppercase font-bold tracking-wider text-accent">RenoPay Smart Voice Box</p>
+            <p className="text-xs font-bold text-textLight truncate">{voiceToast}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setVoiceToast(null)}
+            className="text-muted hover:text-white text-xs cursor-pointer p-1"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <AIAssistant currentScreen={screen} onNavigate={go} />
       <Nav active={tab} onNavigate={go} />
     </div>
