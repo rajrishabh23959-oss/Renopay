@@ -1,4 +1,4 @@
-﻿"""
+"""
 Gold Round-Up Service.
 
 Every time a debit transaction fires, the payment engine calls
@@ -94,6 +94,7 @@ async def execute_round_up(
         "total_accumulated": pot.total_accumulated_paise / 100,
         "grams_bought": grams_bought,
         "purchase_amount": purchase_amount_paise / 100,
+        "purchase_amount_paise": purchase_amount_paise,
     }
 
 

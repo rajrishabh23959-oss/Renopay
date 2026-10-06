@@ -285,4 +285,37 @@ export const FinancialAPI = {
   },
 };
 
+// ---------- Merchant Voice Box (Soundbox) ----------
+export const VoiceBoxAPI = {
+  getStatus: () => http.get("/voicebox/status").then((r) => r.data),
+  activate: (language = "hi") => http.post("/voicebox/activate", { language }).then((r) => r.data),
+  changeLanguage: (language) => http.post("/voicebox/change-language", { language }).then((r) => r.data),
+  renew: () => http.post("/voicebox/renew").then((r) => r.data),
+  toggleSettings: (settings) => http.post("/voicebox/toggle-settings", settings).then((r) => r.data),
+  sampleAnnouncement: (sender_name = "Praveen", amount = 100, language = null) =>
+    http.post("/voicebox/sample-announcement", { sender_name, amount, language }).then((r) => r.data),
+};
+
+// ---------- Digital Khatabook ----------
+export const KhatabookAPI = {
+  getSummary: () => http.get("/khatabook/summary").then((r) => r.data),
+  getCustomers: (search = "", filter_type = null) =>
+    http.get("/khatabook/customers", { params: { search, filter_type } }).then((r) => r.data),
+  createCustomer: (customer) => http.post("/khatabook/customers", customer).then((r) => r.data),
+  getCustomerDetails: (customerId) => http.get(`/khatabook/customers/${customerId}`).then((r) => r.data),
+  addEntry: (customerId, entry) => http.post(`/khatabook/customers/${customerId}/entries`, entry).then((r) => r.data),
+  requestPayment: (customerId, amount = null, note = null) =>
+    http.post(`/khatabook/customers/${customerId}/request-pay`, { amount, note }).then((r) => r.data),
+  parseVoiceEntry: (transcript, auto_save = false) =>
+    http.post("/khatabook/voice-parse", { transcript, auto_save }).then((r) => r.data),
+  getCustomerPdf: async (customerId) => {
+    const r = await http.get(`/khatabook/customers/${customerId}/pdf`, { responseType: "blob" });
+    return r.data;
+  },
+  getMonthlySalesPdf: async (month = null, year = null) => {
+    const r = await http.get("/khatabook/reports/monthly-sales-pdf", { params: { month, year }, responseType: "blob" });
+    return r.data;
+  },
+};
+
 

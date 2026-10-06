@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.routers import auth, accounts, payments, requests as requests_router
 from app.routers import mandates, rewards, goals, vaults, lite, analytics, ws
 from app.routers import gold, voice, ledger, accounting, ai, travel, financial_services, gift_cards
+from app.routers import voicebox, khatabook
 from app.services.scheduler import start_scheduler
 
 
@@ -116,6 +117,8 @@ app.include_router(ai.router, prefix="/ai", tags=["ai-assistant"])
 app.include_router(travel.router, prefix="/travel", tags=["travel"])
 app.include_router(financial_services.router, prefix="/financial", tags=["financial-services"])
 app.include_router(gift_cards.router, prefix="/gift-cards", tags=["gift-cards"])
+app.include_router(voicebox.router, prefix="/voicebox", tags=["voicebox"])
+app.include_router(khatabook.router, prefix="/khatabook", tags=["khatabook"])
 
 
 @app.patch("/user/preferences", tags=["user-preferences"])

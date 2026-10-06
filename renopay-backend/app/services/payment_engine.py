@@ -271,12 +271,15 @@ async def send_money(
         rounded = ((amount_paise // 1000) + 1) * 1000 if amount_paise % 1000 else amount_paise
         round_up_paise = rounded - amount_paise
         if round_up_paise > 0 and sender_account.current_balance_paise >= round_up_paise:
+            # Deduct spare change from wallet balance into the Gold Pot
             sender_account.current_balance_paise -= round_up_paise
-            sender_account.digital_gold_paise += round_up_paise
-            # Also track in UserGoldPot for threshold-based purchase logic
+            # Keep in UserGoldPot until full threshold (e.g. ₹200) triggers purchase
             gold_pot_info = await gold_service.execute_round_up(
                 db, sender_user_id, round_up_paise
             )
+            # When pot reaches threshold, pure gold purchase executes and credits digital gold balance
+            if gold_pot_info.get("purchased"):
+                sender_account.digital_gold_paise += gold_pot_info.get("purchase_amount_paise", 0)
 
     now = datetime.now(timezone.utc)
 
@@ -361,6 +364,35 @@ async def send_money(
         sender_user.last_lng = current_lng
         sender_user.last_location_at = now
 
+    # --- Khatabook Auto-Reconciliation for Receiver Merchant ---
+    try:
+        from app.models.shopkeeper import KhatabookCustomer, KhatabookEntry
+        from sqlalchemy import or_
+        khata_q = select(KhatabookCustomer).where(
+            KhatabookCustomer.merchant_user_id == receiver_account.user_id,
+            or_(
+                KhatabookCustomer.upi_id == sender_account.vpa,
+                KhatabookCustomer.phone == sender_user.phone_number,
+            )
+        )
+        khata_res = await db.execute(khata_q)
+        khata_cust = khata_res.scalar_one_or_none()
+        if khata_cust:
+            khata_cust.net_balance_paise -= amount_paise
+            k_entry = KhatabookEntry(
+                customer_id=khata_cust.id,
+                merchant_user_id=receiver_account.user_id,
+                entry_type="received",
+                amount_paise=amount_paise,
+                items_description=f"Auto-settled via RenoPay (Ref: {txn_ref})",
+                entry_date=now.date(),
+                payment_mode="renopay_upi",
+                renopay_txn_ref=txn_ref,
+            )
+            db.add(k_entry)
+    except Exception as e:
+        logger.warning(f"Khatabook auto-reconcile notice: {e}")
+
     await db.commit()
     await db.refresh(sender_account)
     await db.refresh(receiver_account)
@@ -384,6 +416,37 @@ async def send_money(
         "denominations": receiver_account.cash_denominations,
         "reason": "credit", "txn_ref": txn_ref,
     })
+
+    # --- Real-Time Voice Box Audio Announcement for Receiver Merchant ---
+    try:
+        from app.models.shopkeeper import MerchantVoiceBox
+        from app.routers.voicebox import build_announcement_text
+        vb_res = await db.execute(
+            select(MerchantVoiceBox).where(
+                MerchantVoiceBox.user_id == receiver_account.user_id,
+                MerchantVoiceBox.is_active == True,
+            )
+        )
+        vb = vb_res.scalar_one_or_none()
+        if vb and vb.expires_at and vb.expires_at > now:
+            voice_text = build_announcement_text(
+                vb.language,
+                sender_name=sender_user.full_name or "Customer",
+                amount=amount_paise / 100,
+                current_balance=receiver_account.current_balance_paise / 100,
+                include_balance=vb.announce_balance,
+            )
+            await ws_manager.push(receiver_account.user_id, "voicebox_announcement", {
+                "text": voice_text,
+                "amount": amount_paise / 100,
+                "sender_name": sender_user.full_name or "Customer",
+                "language": vb.language,
+                "balance": receiver_account.current_balance_paise / 100,
+                "txn_ref": txn_ref,
+            })
+    except Exception as e:
+        logger.warning(f"Voicebox trigger notice: {e}")
+
     # Push gold pot update if round-up happened
     if gold_pot_info:
         await ws_manager.push(sender_account.user_id, "gold_pot_update", {

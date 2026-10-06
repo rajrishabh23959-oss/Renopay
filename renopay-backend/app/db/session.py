@@ -57,9 +57,12 @@ async def init_db_if_needed():
             check = await conn.execute(text("SELECT 1 FROM information_schema.tables WHERE table_name = 'users' LIMIT 1;"))
             tables_exist = check.scalar() is not None
 
+        # Always ensure newly added tables (like merchant_voicebox, khatabook) are created
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
         if not tables_exist:
             async with engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
                 for sql in [
                     "ALTER TABLE scratch_cards ADD COLUMN IF NOT EXISTS is_withdrawn BOOLEAN DEFAULT FALSE;",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS language_code VARCHAR(10) DEFAULT 'en';",

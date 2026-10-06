@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { PdfPreviewModal } from "../components/PdfPreviewModal";
 import { DatePickerInput } from "../components/DatePickerInput";
 import { downloadOrSharePdf } from "../lib/download";
+import { ShopkeeperHub } from "../components/ShopkeeperHub";
 
 function formatDateStr(d) {
   return d.toISOString().split("T")[0];
@@ -109,6 +110,7 @@ function SectionDateFilterBar({
 
 export function AccountingScreen({ onBack }) {
   const { profile } = useAuth();
+  const [merchantMode, setMerchantMode] = useState("shopkeeper"); // "shopkeeper" | "accounting"
 
   const [devMode, setDevMode] = useState(false);
   const [activeTab, setActiveTab] = useState("journal");
@@ -514,12 +516,52 @@ export function AccountingScreen({ onBack }) {
   return (
     <div className="min-h-screen bg-bg pb-[100px]">
       {/* Header */}
-      <div className="pt-[50px] pb-4 px-[22px] flex items-center gap-3">
-        <button className="btn bg-card border border-line text-text rounded-xl px-3.5 py-2.5 text-base" onClick={onBack}>←</button>
-        <h2 className="text-[22px] font-extrabold text-textLight">Business Mode</h2>
+      <div className="pt-[50px] pb-3 px-[22px] flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button className="btn bg-card border border-line text-text rounded-xl px-3.5 py-2.5 text-base" onClick={onBack}>←</button>
+          <h2 className="text-[22px] font-extrabold text-textLight">Merchant Hub</h2>
+        </div>
+        <Badge color="#FF6A1A" size={10}>
+          {merchantMode === "shopkeeper" ? "Shopkeeper Mode" : "Accounting Mode"}
+        </Badge>
       </div>
 
-      <div className="px-[22px] flex flex-col gap-4">
+      {/* Dual Mode Switcher Bar */}
+      <div className="px-[22px] mb-3">
+        <div className="bg-surf p-1 rounded-2xl border border-line flex gap-1 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setMerchantMode("shopkeeper")}
+            className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              merchantMode === "shopkeeper"
+                ? "bg-accent text-white shadow-accentGlow"
+                : "text-muted hover:text-textLight hover:bg-card/60"
+            }`}
+          >
+            <span>🏪</span>
+            <span>Shopkeeper Mode (दुकानदार)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMerchantMode("accounting")}
+            className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              merchantMode === "accounting"
+                ? "bg-accent text-white shadow-accentGlow"
+                : "text-muted hover:text-textLight hover:bg-card/60"
+            }`}
+          >
+            <span>📊</span>
+            <span>Accounting (Enterprise)</span>
+          </button>
+        </div>
+      </div>
+
+      {merchantMode === "shopkeeper" ? (
+        <div className="px-[22px]">
+          <ShopkeeperHub />
+        </div>
+      ) : (
+        <div className="px-[22px] flex flex-col gap-4">
 
         {/* Dev Mode Toggle Card */}
         <Card className="p-4 flex items-center justify-between dark:bg-gradient-to-r dark:from-[#192926] dark:to-[#2d4a42] bg-surf border border-line">
@@ -1643,10 +1685,10 @@ export function AccountingScreen({ onBack }) {
                 </div>
               </div>
             </Card>
-
           </>
         )}
       </div>
+      )}
 
       {/* PDF Preview Modal */}
       <PdfPreviewModal

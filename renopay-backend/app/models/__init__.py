@@ -24,3 +24,6 @@ from app.models.ai import AIConfig, AIChatSession, AIChatMessage  # noqa: F401
 from app.models.travel import TravelBooking, TravelBookingType, TravelBookingStatus  # noqa: F401
 from app.models.financial import Loan, Investment, BillPayment  # noqa: F401
 from app.models.gift_card import GiftCard  # noqa: F401
+from app.models.shopkeeper import (                             # noqa: F401
+    MerchantVoiceBox, KhatabookCustomer, KhatabookEntry
+)
