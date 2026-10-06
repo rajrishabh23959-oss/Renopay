@@ -16,84 +16,8 @@ _db_initialized = False
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
-        from app.db.session import engine, AsyncSessionLocal
-        from app.db.base import Base
-        import app.models  # noqa: F401
-        from app.models.user import User, KYCStatus
-        from app.models.account import Account
-        from app.core.security import hash_pin
-        from app.core.money import generate_virtual_acc_no
-        from sqlalchemy import select, text
-
-        global _db_initialized
-        if not _db_initialized:
-            async with engine.connect() as conn:
-                check = await conn.execute(text("SELECT 1 FROM information_schema.tables WHERE table_name = 'users' LIMIT 1;"))
-                tables_exist = check.scalar() is not None
-
-            if not tables_exist:
-                async with engine.begin() as conn:
-                    await conn.run_sync(Base.metadata.create_all)
-                    try:
-                        await conn.execute(text("ALTER TABLE scratch_cards ADD COLUMN IF NOT EXISTS is_withdrawn BOOLEAN DEFAULT FALSE;"))
-                    except Exception as e:
-                        print(f"Could not alter scratch_cards table: {e}")
-                    try:
-                        await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS language_code VARCHAR(10) DEFAULT 'en';"))
-                    except Exception as e:
-                        print(f"Could not alter users table for language_code: {e}")
-                    try:
-                        await conn.execute(text("ALTER TABLE users ALTER COLUMN avatar_url TYPE TEXT;"))
-                    except Exception as e:
-                        print(f"Could not alter users table for avatar_url TYPE TEXT: {e}")
-                    try:
-                        await conn.execute(text("ALTER TABLE gift_cards ADD COLUMN IF NOT EXISTS payment_mode VARCHAR(20) DEFAULT 'normal';"))
-                    except Exception as e:
-                        print(f"Could not alter gift_cards table for payment_mode: {e}")
-
-                async with AsyncSessionLocal() as session:
-                    res = await session.execute(select(User).where(User.phone_number == "9876543210"))
-                    existing_user = res.scalar_one_or_none()
-                    if not existing_user:
-                        user = User(
-                            full_name="Rishab Raj",
-                            phone_number="9876543210",
-                            email="rishab@example.com",
-                            pin_hash=hash_pin("123456"),
-                            kyc_status=KYCStatus.VERIFIED,
-                        )
-                        session.add(user)
-                        await session.flush()
-                        account = Account(
-                            user_id=user.id,
-                            virtual_acc_no=generate_virtual_acc_no(),
-                            vpa="rishabhraj@renopay",
-                            current_balance_paise=5000000,
-                            upi_lite_balance_paise=100000,
-                            digital_gold_paise=250000,
-                        )
-                        session.add(account)
-
-                        user2 = User(
-                            full_name="Alex Morgan",
-                            phone_number="9876543211",
-                            email="alex@example.com",
-                            pin_hash=hash_pin("123456"),
-                            kyc_status=KYCStatus.VERIFIED,
-                        )
-                        session.add(user2)
-                        await session.flush()
-                        account2 = Account(
-                            user_id=user2.id,
-                            virtual_acc_no=generate_virtual_acc_no(),
-                            vpa="alex@renopay",
-                            current_balance_paise=2500000,
-                            upi_lite_balance_paise=50000,
-                            digital_gold_paise=50000,
-                        )
-                        session.add(account2)
-                        await session.commit()
-            _db_initialized = True
+        from app.db.session import init_db_if_needed
+        await init_db_if_needed()
     except Exception as e:
         print(f"Warning during database initialization: {e}")
 
@@ -145,12 +69,24 @@ async def global_exception_handler(request, exc):
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
     tb = traceback.format_exc()
     print("UNHANDLED EXCEPTION ON", request.url.path, ":", tb)
+    exc_str = str(exc)
+    exc_type = type(exc).__name__
+    
+    # Catch common database connection / authentication errors and provide clear actionable details
+    if any(k in exc_str.lower() or k in exc_type.lower() for k in ["password authentication failed", "asyncpg", "connection refused", "operationalerror"]):
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": f"Database Error: {exc_str}. Check DATABASE_URL credentials in Vercel project environment variables.",
+            },
+        )
+
     if settings.DEBUG:
         return JSONResponse(
             status_code=500,
             content={
                 "detail": str(exc),
-                "type": type(exc).__name__,
+                "type": exc_type,
                 "traceback": tb.splitlines()[-8:],
             },
         )
@@ -158,6 +94,7 @@ async def global_exception_handler(request, exc):
         status_code=500,
         content={"detail": "Internal server error. Please try again later."},
     )
+
 
 
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -235,7 +172,7 @@ async def health():
                 "status": "unhealthy",
                 "version": "1.0.0",
                 "database": db_status,
-                "database_error": db_err if settings.DEBUG else "Database connection failed",
+                "database_error": db_err,
             },
         )
 
