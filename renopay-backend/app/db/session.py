@@ -53,12 +53,13 @@ async def init_db_if_needed():
         from app.core.money import generate_virtual_acc_no
         from sqlalchemy import select, text
 
+        from app.core.logging import logger
         # 1. Base table creation
         try:
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
         except Exception as e:
-            print(f"Base metadata create_all notice: {e}")
+            logger.info("Base metadata create_all notice: %s", e)
 
         # 2. Individual DDL migrations - each in its own transaction so one failure doesn't abort others
         migrations = [
@@ -205,13 +206,13 @@ async def init_db_if_needed():
                     await session.commit()
         _db_initialized = True
     except Exception as e:
-        print(f"init_db_if_needed warning: {e}")
+        logger.warning("init_db_if_needed warning: %s", e)
 
 
 async def get_db():
-    """FastAPI dependency — yields a session, guarantees close."""
-    if not _db_initialized:
-        await init_db_if_needed()
+    """FastAPI dependency — yields a session, guarantees close.
+    Does NOT run DDL or migrations on the request path for zero latency overhead.
+    """
     async with AsyncSessionLocal() as session:
         try:
             yield session

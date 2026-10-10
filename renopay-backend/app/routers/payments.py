@@ -20,6 +20,9 @@ from app.ws.manager import manager as ws_manager
 router = APIRouter()
 
 
+from app.core.cache import get_cached, set_cached
+
+
 @router.get("/resolve/{vpa}", response_model=ResolveVPAResponse)
 async def resolve_vpa(
     vpa: str,
@@ -28,6 +31,13 @@ async def resolve_vpa(
 ):
     clean_vpa = vpa.strip()
     clean_vpa_lower = clean_vpa.lower()
+
+    if not pn:
+        cached = await get_cached(f"vpa:{clean_vpa_lower}")
+        if cached:
+            return ResolveVPAResponse(**cached)
+
+    resolved_resp = None
 
     # 1. If internal RenoPay handle, look up user from database
     if clean_vpa_lower.endswith("@renopay"):
@@ -43,24 +53,29 @@ async def resolve_vpa(
             row = result.first()
             if row is not None:
                 _, user = row
-                return ResolveVPAResponse(vpa=clean_vpa, name=user.full_name, app="RenoPay", bank="RenoPay Virtual Bank")
-            if clean_vpa_lower in ("rishabhraj@renopay", "rishab@renopay", "rishabraj@renopay"):
-                return ResolveVPAResponse(vpa=clean_vpa, name="Rishabh Raj", app="RenoPay", bank="RenoPay Virtual Bank")
+                resolved_resp = ResolveVPAResponse(vpa=clean_vpa, name=user.full_name, app="RenoPay", bank="RenoPay Virtual Bank")
+            elif clean_vpa_lower in ("rishabhraj@renopay", "rishab@renopay", "rishabraj@renopay"):
+                resolved_resp = ResolveVPAResponse(vpa=clean_vpa, name="Rishabh Raj", app="RenoPay", bank="RenoPay Virtual Bank")
         except Exception:
             pass
 
     # 2. External UPI handle validation (Paytm, PhonePe, Google Pay, YESPay/Flipkart, BharatPe, BHIM, Banks, etc.)
-    if "@" in clean_vpa_lower:
+    if not resolved_resp and "@" in clean_vpa_lower:
         parts = clean_vpa_lower.split("@")
         if len(parts) == 2 and parts[0] and parts[1]:
             info = identify_upi_provider(clean_vpa_lower)
             display_name = pn.strip() if (pn and pn.strip()) else format_name_from_vpa(clean_vpa)
-            return ResolveVPAResponse(
+            resolved_resp = ResolveVPAResponse(
                 vpa=clean_vpa,
                 name=display_name,
                 app=info["app_name"],
                 bank=info["bank_name"],
             )
+
+    if resolved_resp:
+        if not pn:
+            await set_cached(f"vpa:{clean_vpa_lower}", resolved_resp.model_dump(), ttl_seconds=300)
+        return resolved_resp
 
     raise HTTPException(status.HTTP_404_NOT_FOUND, "VPA not found")
 

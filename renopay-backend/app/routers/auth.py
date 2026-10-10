@@ -41,7 +41,9 @@ from app.core.rate_limit import rate_limit_ip
 
 _redis_mock = MockRedis()
 async def _get_redis():
-    return _redis_mock
+    from app.core.rate_limit import get_redis_client
+    r = await get_redis_client()
+    return r if r is not None else _redis_mock
 
 
 
