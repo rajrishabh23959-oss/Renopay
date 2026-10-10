@@ -191,10 +191,18 @@ async def post_transaction_to_journal(db: AsyncSession, txn: Transaction) -> Jou
     return entry
 
 
-async def get_ledger_for_account(db: AsyncSession, chart_account_id: uuid.UUID, from_date: datetime = None, to_date: datetime = None):
-    """Returns T-account structure for a given ledger head."""
+async def get_ledger_for_account(
+    db: AsyncSession,
+    chart_account_id: uuid.UUID,
+    from_date: datetime = None,
+    to_date: datetime = None,
+    account_id: uuid.UUID | None = None,
+):
+    """Returns T-account structure for a given ledger head, strictly scoped to account_id."""
     coa = await db.get(ChartOfAccount, chart_account_id)
     if not coa:
+        return None
+    if account_id is not None and coa.account_id != account_id:
         return None
         
     query = (

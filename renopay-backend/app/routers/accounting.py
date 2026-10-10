@@ -129,7 +129,7 @@ async def get_ledger(
         except ValueError:
             pass
 
-    data = await accounting_engine.get_ledger_for_account(db, chart_account_id, dt_from, dt_to)
+    data = await accounting_engine.get_ledger_for_account(db, chart_account_id, dt_from, dt_to, account_id=account.id)
     if not data:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Account not found")
         

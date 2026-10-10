@@ -14,13 +14,18 @@ from app.services.scheduler import start_scheduler
 _db_initialized = False
 
 
+from app.core.logging import logger
+import uuid
+from fastapi.responses import JSONResponse
+import traceback
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
         from app.db.session import init_db_if_needed
         await init_db_if_needed()
     except Exception as e:
-        print(f"Warning during database initialization: {e}")
+        logger.warning("Warning during database initialization: %s", e)
 
     import os
     scheduler = None
@@ -28,7 +33,7 @@ async def lifespan(app: FastAPI):
         try:
             scheduler = start_scheduler()
         except Exception as e:
-            print(f"Warning starting scheduler: {e}")
+            logger.warning("Warning starting scheduler: %s", e)
     yield
     if scheduler:
         scheduler.shutdown()
@@ -37,18 +42,38 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     version="0.2.0",
-    description="RenoPay backend — Phase 2: auth, payments, and all feature routers.",
+    description="RenoPay backend — Production fintech API.",
     lifespan=lifespan,
 )
 
+# SEC-01: Enforce explicit CORS allowlist without wildcard regex
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
-    allow_origin_regex=r"^https?://.*|^capacitor://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# SEC-08: Request body size limit (5MB) & Security Headers Middleware
+@app.middleware("http")
+async def security_and_size_middleware(request, call_next):
+    # Enforce request body size limit
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > 5 * 1024 * 1024:
+        return JSONResponse(
+            status_code=413,
+            content={"detail": "Payload too large. Request body exceeds 5MB limit."},
+        )
+
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
+    return response
 
 
 @app.middleware("http")
@@ -60,40 +85,24 @@ async def handle_api_prefix(request, call_next):
     return await call_next(request)
 
 
-from fastapi.responses import JSONResponse
-import traceback
-
+# SEC-02: Sanitize global exception handler, assign request-id, prevent DB error leaks
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
     from fastapi import HTTPException
     if isinstance(exc, HTTPException):
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-    tb = traceback.format_exc()
-    print("UNHANDLED EXCEPTION ON", request.url.path, ":", tb)
-    exc_str = str(exc)
-    exc_type = type(exc).__name__
-    
-    # Catch common database connection / authentication errors and provide clear actionable details
-    if any(k in exc_str.lower() or k in exc_type.lower() for k in ["password authentication failed", "asyncpg", "connection refused", "operationalerror"]):
-        return JSONResponse(
-            status_code=500,
-            content={
-                "detail": f"Database Error: {exc_str}. Check DATABASE_URL credentials in Vercel project environment variables.",
-            },
-        )
 
-    if settings.DEBUG:
-        return JSONResponse(
-            status_code=500,
-            content={
-                "detail": str(exc),
-                "type": exc_type,
-                "traceback": tb.splitlines()[-8:],
-            },
-        )
+    request_id = str(uuid.uuid4())
+    tb = traceback.format_exc()
+    logger.error("Unhandled exception [request_id=%s] on %s: %s", request_id, request.url.path, tb)
+
+    # Return safe generic response to clients — details logged server-side only
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal server error. Please try again later."},
+        content={
+            "detail": "An internal server error occurred. Please contact support with the request ID.",
+            "request_id": request_id,
+        },
     )
 
 

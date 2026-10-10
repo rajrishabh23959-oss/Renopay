@@ -31,16 +31,8 @@ async def websocket_endpoint(
             pass
         return
 
-    # User is authenticated, register the connection
-    user_id_str = str(user_id)
-    if user_id_str not in manager._connections:
-        manager._connections[user_id_str] = []
-    
-    if len(manager._connections[user_id_str]) >= manager.MAX_CONNECTIONS_PER_USER:
-        oldest = manager._connections[user_id_str].pop(0)
-        await oldest.close(code=1008, reason="Too many connections")
-        
-    manager._connections[user_id_str].append(websocket)
+    # SEC-07: Register connection via encapsulated manager
+    await manager.register_connection(user_id, websocket)
 
     try:
         while True:

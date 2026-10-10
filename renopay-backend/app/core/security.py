@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from cryptography.fernet import Fernet
-from jose import jwt, JWTError
+import jwt
 from passlib.context import CryptContext
 
 from app.core.config import settings
@@ -73,7 +73,7 @@ def decode_access_token(token: str) -> uuid.UUID | None:
         if payload.get("type") != "access":
             return None
         return uuid.UUID(payload["sub"])
-    except (JWTError, ValueError, KeyError):
+    except (jwt.PyJWTError, ValueError, KeyError):
         return None
 
 

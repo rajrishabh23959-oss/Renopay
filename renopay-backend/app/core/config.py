@@ -92,15 +92,19 @@ class Settings(BaseSettings):
     @field_validator("JWT_SECRET_KEY")
     @classmethod
     def validate_jwt_secret(cls, v: str, info: ValidationInfo):
-        if v == "CHANGE_ME_IN_ENV" and info.data.get("ENV", "development") != "development":
-            raise ValueError("JWT_SECRET_KEY must be changed in non-development environments")
+        env = str(info.data.get("ENV", "development")).lower().strip()
+        if env not in ("development", "test", "testing"):
+            if v in ("CHANGE_ME_IN_ENV", "secret", "changeme") or len(v) < 32:
+                raise ValueError("JWT_SECRET_KEY must be a strong secret (>= 32 chars) in non-development environments")
         return v
 
     @field_validator("FIELD_ENCRYPTION_KEY")
     @classmethod
     def validate_fernet_key(cls, v: str, info: ValidationInfo):
-        if v.startswith("CHANGE_ME") and info.data.get("ENV", "development") != "development":
-            raise ValueError("FIELD_ENCRYPTION_KEY must be changed in non-development environments")
+        env = str(info.data.get("ENV", "development")).lower().strip()
+        if env not in ("development", "test", "testing"):
+            if v.startswith("CHANGE_ME") or len(v) != 44:
+                raise ValueError("FIELD_ENCRYPTION_KEY must be a valid 44-character urlsafe base64 Fernet key outside development environments")
         return v
 
     @field_validator("CORS_ORIGINS")

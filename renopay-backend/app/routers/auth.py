@@ -36,13 +36,16 @@ class MockRedis:
     async def get(self, key):
         return self._data.get(key)
 
+from app.core.rate_limit import rate_limit_ip
+
+
 _redis_mock = MockRedis()
 async def _get_redis():
     return _redis_mock
 
 
 
-@router.post("/register", response_model=TokenResponse)
+@router.post("/register", response_model=TokenResponse, dependencies=[Depends(rate_limit_ip(max_requests=10, window_seconds=60))])
 async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
     existing = await db.execute(select(User).where(User.phone_number == payload.phone_number))
     user = existing.scalar_one_or_none()
@@ -94,7 +97,7 @@ from pydantic import BaseModel
 class VerifyPinRequest(BaseModel):
     pin: str
 
-@router.post("/verify-pin")
+@router.post("/verify-pin", dependencies=[Depends(rate_limit_ip(max_requests=15, window_seconds=60))])
 async def verify_pin_endpoint(
     payload: VerifyPinRequest,
     user: User = Depends(get_current_user),
@@ -118,7 +121,7 @@ def _ensure_utc(dt: datetime | None) -> datetime | None:
     return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse, dependencies=[Depends(rate_limit_ip(max_requests=15, window_seconds=60))])
 async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.phone_number == payload.phone_number))
     user = result.scalar_one_or_none()

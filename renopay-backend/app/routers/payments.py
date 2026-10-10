@@ -65,7 +65,10 @@ async def resolve_vpa(
     raise HTTPException(status.HTTP_404_NOT_FOUND, "VPA not found")
 
 
-@router.post("/send", response_model=SendMoneyResponse)
+from app.core.rate_limit import rate_limit_ip
+
+
+@router.post("/send", response_model=SendMoneyResponse, dependencies=[Depends(rate_limit_ip(max_requests=30, window_seconds=60))])
 async def send_money(
     payload: SendMoneyRequest,
     user: User = Depends(get_current_user),
