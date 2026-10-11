@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import bhimLogo from "../assets/bhim-logo-transparent.png";
 import { playUpiSonic } from "../lib/upiSonic";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 
 /**
  * NPCI Mandated "Do's and Don'ts" Safety Warning Modal.
@@ -9,6 +10,7 @@ import { playUpiSonic } from "../lib/upiSonic";
  */
 export function UpiSafetyModal() {
   const [isOpen, setIsOpen] = useState(false);
+  const modalRef = useFocusTrap(isOpen, () => handleAcknowledge());
 
   useEffect(() => {
     const acknowledged = localStorage.getItem("renopay_safety_acknowledged");
@@ -27,8 +29,16 @@ export function UpiSafetyModal() {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-      <div className="w-full max-w-md bg-card border border-line rounded-3xl p-6 shadow-2xl relative overflow-hidden animate-scaleUp">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="upi-safety-title"
+    >
+      <div
+        ref={modalRef}
+        className="w-full max-w-md bg-card border border-line rounded-3xl p-6 shadow-2xl relative overflow-hidden animate-scaleUp"
+      >
         {/* Top Glow Accent */}
         <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-accent via-teal to-accent" />
 

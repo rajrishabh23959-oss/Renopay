@@ -412,7 +412,7 @@ export function PayScreen({ onBack, onNavigate, prefillVpa, prefillAmount, prefi
         )}
 
         {step === "result" && result && (
-          <div className="animate-fadeUp text-center pt-5">
+          <div className="animate-fadeUp text-center pt-5" aria-live="polite" role="status">
             <div
               className="w-[90px] h-[90px] rounded-full flex items-center justify-center text-4xl mx-auto mb-[18px] animate-heartbeat"
               style={{ background: result.success ? "#22C55E22" : "#ff3d6022", border: `2px solid ${result.success ? "#22C55E" : "#ff3d60"}` }}

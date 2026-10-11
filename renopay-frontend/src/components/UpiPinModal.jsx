@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { AuthAPI } from "../lib/api";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 
 /**
  * UpiPinModal
@@ -18,7 +19,7 @@ export function UpiPinModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [shake, setShake] = useState(false);
-  const modalRef = useRef(null);
+  const modalRef = useFocusTrap(isOpen, onClose);
 
   useEffect(() => {
     if (isOpen) {
@@ -114,7 +115,12 @@ export function UpiPinModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="upi-pin-title"
+    >
       {/* Container */}
       <div
         ref={modalRef}
@@ -130,6 +136,7 @@ export function UpiPinModal({
           <button
             onClick={onClose}
             type="button"
+            aria-label="Close"
             className="absolute top-5 right-5 w-8 h-8 rounded-full bg-card border border-line text-muted hover:text-textLight flex items-center justify-center transition-colors cursor-pointer"
           >
             ✕
@@ -140,7 +147,7 @@ export function UpiPinModal({
             <span className="text-[13px] font-bold text-accent tracking-wide">{bank}</span>
           </div>
 
-          <h3 className="text-[18px] font-extrabold text-textLight">Enter UPI PIN</h3>
+          <h3 id="upi-pin-title" className="text-[18px] font-extrabold text-textLight">Enter UPI PIN</h3>
           <p className="text-[11px] text-muted mt-0.5">
             Authenticate to view available balance & cash breakdown
           </p>

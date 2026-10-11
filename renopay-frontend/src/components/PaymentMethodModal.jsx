@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { fmt } from "../lib/format";
 import { Btn } from "./ui";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 
 import note500Img from "../assets/currency/note_500.webp";
 import note200Img from "../assets/currency/note_200.webp";
@@ -57,6 +58,7 @@ export function PaymentMethodModal({
   const [isSliding, setIsSliding] = useState(false);
   const [isSlideComplete, setIsSlideComplete] = useState(false);
   const sliderTrackRef = useRef(null);
+  const modalRef = useFocusTrap(isOpen, onClose);
 
   const numAmount = Number(amount) || 0;
   const hasInsufficientBalance = accountBalance < numAmount;
@@ -141,13 +143,21 @@ export function PaymentMethodModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fade-in">
-      <div className="w-full max-w-sm bg-card border border-line rounded-3xl p-4 sm:p-5 shadow-2xl relative my-auto max-h-[92vh] overflow-y-auto scrollbar-none">
+    <div
+      className="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fade-in"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="checkout-modal-title"
+    >
+      <div
+        ref={modalRef}
+        className="w-full max-w-sm bg-card border border-line rounded-3xl p-4 sm:p-5 shadow-2xl relative my-auto max-h-[92vh] overflow-y-auto scrollbar-none"
+      >
         {/* Header */}
         <div className="flex items-start justify-between mb-3 pb-2 border-b border-line">
           <div className="min-w-0 pr-2">
             <span className="text-[10px] uppercase font-bold tracking-wider text-accent">RenoPay Checkout</span>
-            <h3 className="text-base font-extrabold text-textLight leading-snug truncate">{title}</h3>
+            <h3 id="checkout-modal-title" className="text-base font-extrabold text-textLight leading-snug truncate">{title}</h3>
             {subtitle && <p className="text-xs text-muted mt-0.5 truncate">{subtitle}</p>}
           </div>
           <button

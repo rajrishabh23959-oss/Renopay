@@ -86,12 +86,18 @@ export function AddMoneyScreen({ onBack }) {
               <p className="text-muted text-xs">Adding <strong className="text-accent">{fmt(Number(amount))}</strong></p>
             </Card>
             {BANKS.map((b) => (
-              <div key={b.id} onClick={() => setSelBank(b)} className="p-4 mb-2.5 rounded-[20px] flex items-center gap-3.5 cursor-pointer"
-                   style={{ border: `1.5px solid ${selBank?.id === b.id ? "#FF6A1A" : "#2A2320"}`, background: selBank?.id === b.id ? "#FF6A1A0a" : "#151210" }}>
-                <span className="text-2xl">{b.icon}</span>
+              <button
+                key={b.id}
+                type="button"
+                onClick={() => setSelBank(b)}
+                aria-pressed={selBank?.id === b.id}
+                className="w-full text-left p-4 mb-2.5 rounded-[20px] flex items-center gap-3.5 cursor-pointer transition-all"
+                style={{ border: `1.5px solid ${selBank?.id === b.id ? "#FF6A1A" : "#2A2320"}`, background: selBank?.id === b.id ? "#FF6A1A0a" : "#151210" }}
+              >
+                <span className="text-2xl" aria-hidden="true">{b.icon}</span>
                 <div className="flex-1"><p className="font-bold text-sm text-textLight">{b.name}</p></div>
-                {selBank?.id === b.id && <span className="text-accent text-lg">✓</span>}
-              </div>
+                {selBank?.id === b.id && <span className="text-accent text-lg" aria-hidden="true">✓</span>}
+              </button>
             ))}
             <div className="mt-3.5 flex flex-col gap-2.5">
               <Btn onClick={submit} disabled={!selBank || submitting}>{submitting ? "Processing..." : `Pay ${fmt(Number(amount))} →`}</Btn>
@@ -101,7 +107,7 @@ export function AddMoneyScreen({ onBack }) {
         )}
 
         {step === "processing" && (
-          <div className="animate-fadeUp text-center pt-10">
+          <div className="animate-fadeUp text-center pt-10" aria-live="polite">
             <div className="w-[90px] h-[90px] rounded-full bg-accent/[.1] border-2 border-accent/[.33] flex items-center justify-center text-4xl mx-auto mb-5">⏳</div>
             <h2 className="text-xl font-extrabold text-accent">Processing...</h2>
             <p className="text-muted mt-2">Connecting to {selBank?.name}</p>
@@ -109,7 +115,7 @@ export function AddMoneyScreen({ onBack }) {
         )}
 
         {step === "done" && result && (
-          <div className="animate-fadeUp text-center pt-5">
+          <div className="animate-fadeUp text-center pt-5" aria-live="polite">
             <div className="w-[90px] h-[90px] rounded-full bg-teal/[.1] border-2 border-teal/[.33] flex items-center justify-center text-4xl mx-auto mb-5 animate-heartbeat">✅</div>
             <h2 className="text-2xl font-extrabold text-teal">Money Added!</h2>
             <p className="text-muted mt-2">{fmt(Number(amount))} via {selBank?.name}</p>
@@ -122,7 +128,7 @@ export function AddMoneyScreen({ onBack }) {
         )}
 
         {step === "failed" && (
-          <div className="animate-fadeUp text-center pt-5">
+          <div className="animate-fadeUp text-center pt-5" aria-live="assertive">
             <div className="w-[90px] h-[90px] rounded-full bg-danger/[.1] flex items-center justify-center text-4xl mx-auto mb-5">❌</div>
             <h2 className="text-xl font-extrabold text-danger">Payment Failed</h2>
             <p className="text-muted mt-2">Please try again</p>

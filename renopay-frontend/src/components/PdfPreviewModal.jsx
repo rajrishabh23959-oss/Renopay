@@ -144,9 +144,9 @@ export function PdfPreviewModal({ isOpen, onClose, pdfBlob, title = "PDF Preview
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-md animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-md animate-fade-in" role="dialog" aria-modal="true" aria-label={title}>
       {/* Backdrop click */}
-      <div className="absolute inset-0" onClick={onClose} />
+      <button type="button" aria-label="Close modal overlay" className="absolute inset-0 w-full h-full cursor-default bg-transparent border-0" onClick={onClose} tabIndex={-1} />
 
       {/* Modal Window — uses theme-aware colors */}
       <div className="relative z-10 w-full max-w-4xl h-[92vh] max-h-[880px] bg-surf border border-line rounded-2xl shadow-2xl flex flex-col overflow-hidden">

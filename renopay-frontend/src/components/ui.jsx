@@ -45,9 +45,28 @@ export function TrustBadge({ score }) {
   );
 }
 
-export function Card({ children, className = "", style, onClick }) {
+export function Card({ children, className = "", style, onClick, role, tabIndex }) {
+  if (onClick) {
+    return (
+      <div
+        role={role || "button"}
+        tabIndex={tabIndex ?? 0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onClick(e);
+          }
+        }}
+        className={`bg-card border border-line rounded-[20px] text-textLight cursor-pointer ${className}`}
+        style={style}
+        onClick={onClick}
+      >
+        {children}
+      </div>
+    );
+  }
   return (
-    <div className={`bg-card border border-line rounded-[20px] text-textLight ${className}`} style={style} onClick={onClick}>
+    <div className={`bg-card border border-line rounded-[20px] text-textLight ${className}`} style={style}>
       {children}
     </div>
   );
