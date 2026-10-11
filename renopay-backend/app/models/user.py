@@ -22,8 +22,8 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     __tablename__ = "users"
 
     full_name: Mapped[str] = mapped_column(String(120), nullable=False)
-    phone_number: Mapped[str] = mapped_column(String(15), unique=True, index=True, nullable=False)
-    email: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    phone_number: Mapped[str | None] = mapped_column(String(15), unique=True, index=True, nullable=True)
+    email: Mapped[str | None] = mapped_column(String(120), index=True, nullable=True)
 
     # Never store raw PIN — bcrypt hash only
     pin_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)

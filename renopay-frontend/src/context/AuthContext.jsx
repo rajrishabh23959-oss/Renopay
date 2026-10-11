@@ -65,7 +65,9 @@ export function AuthProvider({ children }) {
       setProfile(null);
       try {
         localStorage.removeItem("renopay_cached_profile");
-      } catch {}
+      } catch {
+        /* ignore storage removal error */
+      }
     };
     window.addEventListener("renopay:auth-revoked", handleRevoked);
     return () => window.removeEventListener("renopay:auth-revoked", handleRevoked);
@@ -73,6 +75,11 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (phone, pin) => {
     await AuthAPI.login(phone, pin, getDeviceFingerprint(), navigator.userAgent.slice(0, 60));
+    return refreshProfile();
+  }, [refreshProfile]);
+
+  const loginWithOtp = useCallback(async (email, otp) => {
+    await AuthAPI.verifyOtp(email, otp, getDeviceFingerprint(), navigator.userAgent.slice(0, 60));
     return refreshProfile();
   }, [refreshProfile]);
 
@@ -91,7 +98,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("renopay_cached_profile");
   }, []);
 
-  const value = { profile, loading, login, logout, refreshProfile, register, completeRegistration };
+  const value = { profile, loading, login, loginWithOtp, logout, refreshProfile, register, completeRegistration };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

@@ -77,14 +77,24 @@ class Settings(BaseSettings):
     MAX_PIN_ATTEMPTS: int = 5
     PIN_LOCKOUT_MINUTES: int = 15
 
-    # --- SMS delivery for OTPs ---
-    # "console" (default) logs the OTP server-side instead of sending a
-    # real SMS — safe for local dev/demos. Set to "twilio" for real
-    # delivery once TWILIO_* credentials below are filled in.
+    # --- SMS / Email delivery for OTPs ---
+    # "console" (default) logs the OTP server-side in development.
+    # Set to "email" for real email delivery via SMTP.
+    # Set to "twilio" for SMS delivery once TWILIO_* credentials are set.
     SMS_PROVIDER: str = "console"
     TWILIO_ACCOUNT_SID: str = ""
     TWILIO_AUTH_TOKEN: str = ""
     TWILIO_FROM_NUMBER: str = ""
+
+    # --- SMTP / Email OTP delivery ---
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_NAME: str = "RenoPay"
+    OTP_LENGTH: int = 6
+    OTP_MAX_ATTEMPTS: int = 5
+    OTP_SENDS_PER_HOUR: int = 3
 
     # --- Encryption for sensitive fields (Aadhaar ref, etc.) ---
     FIELD_ENCRYPTION_KEY: str = "CHANGE_ME_32_BYTE_FERNET_KEY_HERE=="

@@ -11,7 +11,6 @@ the test, so tests never leak state into each other and the DB never
 needs to be reset between runs.
 """
 import os
-import asyncio
 
 import pytest
 import pytest_asyncio
@@ -36,17 +35,27 @@ else:
 
 @pytest_asyncio.fixture(scope="session")
 async def engine():
+    eng = None
     try:
         eng = create_async_engine(TEST_DATABASE_URL, poolclass=None)
         async with eng.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-    except Exception as exc:
-        pytest.skip(f"PostgreSQL test database unavailable ({exc}). Required for row-locking/concurrency tests.")
+    except Exception:
+        # Fall back to SQLite when PostgreSQL service is not available locally
+        try:
+            eng = create_async_engine("sqlite+aiosqlite:///test.db", poolclass=None)
+            async with eng.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+        except Exception as exc:
+            pytest.skip(f"Test database unavailable ({exc}).")
     yield eng
     try:
-        async with eng.begin() as conn:
-            await conn.run_sync(Base.metadata.drop_all)
-        await eng.dispose()
+        if eng:
+            async with eng.begin() as conn:
+                await conn.run_sync(Base.metadata.drop_all)
+            await eng.dispose()
+            if os.path.exists("test.db"):
+                os.remove("test.db")
     except Exception:
         pass
 

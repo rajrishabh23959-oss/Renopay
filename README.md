@@ -653,6 +653,42 @@ npm run dev
 
 ---
 
+### 📧 Email OTP Setup (Gmail SMTP)
+
+RenoPay supports transactional email OTP login using asynchronous STARTTLS SMTP (`aiosmtplib`). By default, `SMS_PROVIDER=console` logs OTPs server-side in development. To enable real email delivery to your inbox:
+
+#### 1. Generate a Gmail App Password
+1. Navigate to your [Google Account Security Settings](https://myaccount.google.com/security).
+2. Ensure **2-Step Verification** is turned **ON**.
+3. Under **2-Step Verification**, select **App Passwords** (or search "App passwords" in the top bar).
+4. Enter an app name (e.g., `RenoPay`) and click **Create**.
+5. Copy the generated 16-character password (e.g., `abcd efgh ijkl mnop`).
+
+#### 2. Configure Environment Variables
+In `renopay-backend/.env` (and root `.env` if using Docker), configure:
+```env
+# Switch SMS provider to transactional email
+SMS_PROVIDER=email
+
+# SMTP Configuration
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your_email@gmail.com
+SMTP_PASSWORD=your_16_char_app_password
+SMTP_FROM_NAME="RenoPay"
+
+# OTP Parameters
+OTP_LENGTH=6
+OTP_MAX_ATTEMPTS=5
+OTP_SENDS_PER_HOUR=3
+OTP_EXPIRE_SECONDS=300
+```
+
+> [!IMPORTANT]
+> Never commit real credentials to git. The `.env` file is git-ignored. For local testing and CI workflows, leave `SMS_PROVIDER=console` to log codes to the console without sending live emails.
+
+---
+
 ## 🔑 Default Demo Credentials
 
 For testing and demonstration, use the following pre-seeded test profile:

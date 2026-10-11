@@ -29,6 +29,20 @@ export const AuthAPI = {
     return data;
   },
 
+  sendOtp: async (email) => {
+    const { data } = await http.post("/auth/otp/send", { email });
+    return data;
+  },
+
+  verifyOtp: async (email, otp, device_fingerprint = null, device_label = null) => {
+    const body = { email, otp, device_fingerprint, device_label };
+    const { data } = await http.post("/auth/otp/verify", body);
+    if (data.access_token) {
+      setTokens(data);
+    }
+    return data;
+  },
+
   logout: async () => {
     const refresh_token = localStorage.getItem("renopay_refresh_token");
     if (refresh_token) {

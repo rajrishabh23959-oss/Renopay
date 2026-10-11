@@ -4,6 +4,7 @@ lives here — one module, so there's a single place to audit for crypto
 correctness instead of it being scattered across routers.
 """
 import hashlib
+import hmac
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -107,5 +108,21 @@ def verify_refresh_token(token: str, token_hash: str) -> bool:
             return pwd_context.verify(token, token_hash)
         except Exception:
             return False
+
+
+# ---------- OTP HMAC-SHA256 helpers ----------
+def hash_otp(code: str) -> str:
+    """Computes an HMAC-SHA256 digest of the raw OTP code using JWT_SECRET_KEY."""
+    key = settings.JWT_SECRET_KEY.encode("utf-8")
+    return hmac.new(key, code.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def verify_otp_hash(provided_code: str, stored_hash: str) -> bool:
+    """Performs constant-time verification of raw OTP code against stored HMAC."""
+    if not provided_code or not stored_hash:
+        return False
+    expected_hash = hash_otp(provided_code)
+    return hmac.compare_digest(expected_hash, stored_hash)
+
 
 

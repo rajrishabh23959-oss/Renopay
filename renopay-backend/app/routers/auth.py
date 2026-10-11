@@ -1,17 +1,21 @@
+import logging
+import secrets
+import time
 from datetime import datetime, timedelta, timezone
 
-
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from app.api.deps import get_current_user
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.money import generate_virtual_acc_no
 from app.core.security import (
     hash_pin, verify_pin, create_access_token, generate_refresh_token,
-    hash_refresh_token, verify_refresh_token, encrypt_field, hash_refresh_token_lookup
+    hash_refresh_token, verify_refresh_token, encrypt_field, hash_refresh_token_lookup,
+    hash_otp, verify_otp_hash
 )
+from app.core.rate_limit import rate_limit_ip, check_rate_limit
 from app.db.session import get_db
 from app.models.user import User, KYCStatus, Device
 from app.models.account import Account
@@ -19,24 +23,42 @@ from app.models.auth import RefreshToken
 from app.schemas.auth import (
     RegisterRequest, SetPinRequest,
     LoginRequest, RefreshRequest, TokenResponse,
+    SendOtpRequest, SendOtpResponse, VerifyOtpRequest,
+    VerifyPinRequest,
 )
+from app.services.sms import get_sms_provider
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
 
 class MockRedis:
     def __init__(self):
         self._data = {}
+        self._expiry = {}
 
-    async def setex(self, key, time, value):
+    async def setex(self, key, time_secs, value):
         self._data[key] = value
+        self._expiry[key] = time.time() + float(time_secs)
 
     async def getdel(self, key):
-        return self._data.pop(key, None)
+        val = await self.get(key)
+        await self.delete(key)
+        return val
 
     async def get(self, key):
+        if key in self._expiry and time.time() > self._expiry[key]:
+            self._data.pop(key, None)
+            self._expiry.pop(key, None)
+            return None
         return self._data.get(key)
 
-from app.core.rate_limit import rate_limit_ip
+    async def delete(self, *keys):
+        for k in keys:
+            self._data.pop(k, None)
+            self._expiry.pop(k, None)
+
 
 
 _redis_mock = MockRedis()
@@ -93,11 +115,6 @@ async def set_pin(payload: SetPinRequest, user: User = Depends(get_current_user)
     await db.commit()
     return await _issue_tokens(db, user.id, None)
 
-
-from pydantic import BaseModel
-
-class VerifyPinRequest(BaseModel):
-    pin: str
 
 @router.post("/verify-pin", dependencies=[Depends(rate_limit_ip(max_requests=15, window_seconds=60))])
 async def verify_pin_endpoint(
@@ -211,6 +228,176 @@ async def logout(payload: RefreshRequest, db: AsyncSession = Depends(get_db)):
         rt.revoked = True
         await db.commit()
     return {"success": True}
+
+
+@router.post("/otp/send", response_model=SendOtpResponse)
+async def send_otp_endpoint(
+    payload: SendOtpRequest,
+    request: Request,
+):
+    """
+    Dispatches a 6-digit verification code to the specified email address.
+    Enforces dual rate limits (3/hr per IP and per email) via Redis sliding window.
+    Always returns identical success response regardless of account existence.
+    """
+    email_clean = payload.email.strip().lower()
+
+    # Rate limiting: 3 per hour per email AND per IP
+    client_ip = (
+        request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        or (request.client.host if request.client else "unknown")
+    )
+    await check_rate_limit(f"otp:ip:{client_ip}", max_requests=settings.OTP_SENDS_PER_HOUR, window_seconds=3600)
+    await check_rate_limit(f"otp:email:{email_clean}", max_requests=settings.OTP_SENDS_PER_HOUR, window_seconds=3600)
+
+    # Cryptographically uniform random code using secrets.randbelow
+    otp = "".join(str(secrets.randbelow(10)) for _ in range(settings.OTP_LENGTH))
+
+    # Store only HMAC-SHA256(code) in Redis with TTL
+    otp_hash = hash_otp(otp)
+    redis = await _get_redis()
+    otp_key = f"otp:{email_clean}"
+    attempts_key = f"otp:attempts:{email_clean}"
+
+    await redis.setex(otp_key, settings.OTP_EXPIRE_SECONDS, otp_hash)
+    await redis.setex(attempts_key, settings.OTP_EXPIRE_SECONDS, "0")
+
+    # Send verification email via active provider
+    provider = get_sms_provider()
+    try:
+        await provider.send_otp(email_clean, otp)
+    except Exception as exc:
+        logger.error("Failed to deliver OTP email: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to dispatch verification code. Please check SMTP configuration or try again.",
+        )
+
+    # Return generic success response without user enumeration or OTP disclosure
+    return SendOtpResponse()
+
+
+@router.post("/otp/verify", response_model=TokenResponse)
+async def verify_otp_endpoint(
+    payload: VerifyOtpRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Verifies 6-digit email OTP using constant-time comparison.
+    Enforces maximum 5 attempts lockout.
+    On success: authenticates existing user or creates new user with starting demo account.
+    """
+    email_clean = payload.email.strip().lower()
+    otp_clean = payload.otp.strip()
+
+    redis = await _get_redis()
+    otp_key = f"otp:{email_clean}"
+    attempts_key = f"otp:attempts:{email_clean}"
+
+    # Check attempt counter
+    raw_attempts = await redis.get(attempts_key)
+    attempts = int(raw_attempts or 0)
+    if attempts >= settings.OTP_MAX_ATTEMPTS:
+        await redis.delete(otp_key, attempts_key)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed verification attempts. Please request a new code.",
+        )
+
+    stored_hash = await redis.get(otp_key)
+    if not stored_hash:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification code",
+        )
+
+    # Constant-time comparison
+    if not verify_otp_hash(otp_clean, stored_hash):
+        attempts += 1
+        if attempts >= settings.OTP_MAX_ATTEMPTS:
+            await redis.delete(otp_key, attempts_key)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many failed verification attempts. Please request a new code.",
+            )
+        await redis.setex(attempts_key, settings.OTP_EXPIRE_SECONDS, str(attempts))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification code",
+        )
+
+    # OTP is valid! Delete on success
+    await redis.delete(otp_key, attempts_key)
+
+    # Load or create user
+    res = await db.execute(select(User).where(func.lower(User.email) == email_clean))
+    user = res.scalar_one_or_none()
+
+    if user is None:
+        handle = email_clean.split("@")[0]
+        user = User(
+            full_name=handle.capitalize(),
+            email=email_clean,
+            phone_number=None,
+            pin_hash=None,
+            kyc_status=KYCStatus.VERIFIED,
+        )
+        db.add(user)
+        await db.flush()
+
+        # Create linked Account with starting balance
+        vpa_handle = handle.replace(".", "").replace("+", "").replace("-", "")
+        base_vpa = f"{vpa_handle}@renopay"
+        existing_acc = await db.execute(select(Account).where(Account.vpa == base_vpa))
+        if existing_acc.scalar_one_or_none() is not None:
+            import random as _rng
+            base_vpa = f"{vpa_handle}{_rng.randint(1, 9999)}@renopay"
+
+        account = Account(
+            user_id=user.id,
+            virtual_acc_no=generate_virtual_acc_no(),
+            vpa=base_vpa,
+            current_balance_paise=5000000,
+        )
+        db.add(account)
+        await db.commit()
+    else:
+        # Check if user has linked account
+        acc_res = await db.execute(select(Account).where(Account.user_id == user.id))
+        account = acc_res.scalar_one_or_none()
+        if account is None:
+            handle = (user.email or "user").split("@")[0]
+            vpa_handle = handle.replace(".", "").replace("+", "").replace("-", "")
+            base_vpa = f"{vpa_handle}@renopay"
+            account = Account(
+                user_id=user.id,
+                virtual_acc_no=generate_virtual_acc_no(),
+                vpa=base_vpa,
+                current_balance_paise=5000000,
+            )
+            db.add(account)
+            await db.commit()
+
+    # Track trusted device if fingerprint provided
+    if payload.device_fingerprint:
+        dev_result = await db.execute(
+            select(Device).where(
+                Device.user_id == user.id, Device.device_fingerprint == payload.device_fingerprint
+            )
+        )
+        device = dev_result.scalar_one_or_none()
+        if device is None:
+            db.add(Device(
+                user_id=user.id,
+                device_fingerprint=payload.device_fingerprint,
+                device_label=payload.device_label,
+            ))
+        else:
+            device.last_seen_at = datetime.now(timezone.utc)
+        await db.commit()
+
+    return await _issue_tokens(db, user.id, payload.device_fingerprint)
+
 
 
 async def _issue_tokens(db: AsyncSession, user_id, device_fingerprint: str | None) -> TokenResponse:
