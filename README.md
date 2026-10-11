@@ -7,7 +7,7 @@
 **Architected & Built by Rishabh Raj** · Production-Grade Fintech Platform · 25+ Screens · 22 API Routers · Dual Merchant Ecosystem
 
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI%200.100+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![React](https://img.shields.io/badge/Frontend-React%2019-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
+[![React](https://img.shields.io/badge/Frontend-React%2018-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2016%20/%20Neon-336791?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Vercel](https://img.shields.io/badge/Deployment-Vercel%20Production-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://renopay-u72j.vercel.app)
 [![Docker](https://img.shields.io/badge/Deploy-Docker%20Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)

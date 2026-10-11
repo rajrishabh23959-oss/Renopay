@@ -13,9 +13,12 @@ Requirements (add to requirements.txt):
     jinja2>=3.1.4
 """
 import io
+import logging
 from datetime import datetime, timezone, timedelta
 from typing import Literal
 from jinja2 import Environment, BaseLoader
+
+logger = logging.getLogger(__name__)
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -2351,7 +2354,7 @@ def build_gift_card_data(gift_card, creator_user=None) -> dict:
         bordered.save(buf, format="PNG")
         qr_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
     except Exception as e:
-        print(f"QR code generation notice: {e}")
+        logger.warning("QR code generation notice: %s", e)
 
     # Circular Gold Wax Seal
     seal_b64 = ""
@@ -2386,7 +2389,7 @@ def build_gift_card_data(gift_card, creator_user=None) -> dict:
         s_img.save(s_buf, format="PNG")
         seal_b64 = base64.b64encode(s_buf.getvalue()).decode("utf-8")
     except Exception as e:
-        print(f"Wax seal generation notice: {e}")
+        logger.warning("Wax seal generation notice: %s", e)
 
     now_ist = to_ist(gift_card.created_at)
     exp_ist = to_ist(gift_card.expiry_at)

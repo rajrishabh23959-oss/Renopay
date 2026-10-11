@@ -1,7 +1,10 @@
 import json
 import random
 import uuid
+import logging
 from typing import Literal
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -146,7 +149,7 @@ async def book_travel(
         from app.services import accounting_engine
         await accounting_engine.post_transaction_to_journal(db, txn)
     except Exception as e:
-        print(f"Accounting journal post note: {e}")
+        logger.warning("Accounting journal post note: %s", e)
 
     # Passenger details serialization
     passenger_info = {

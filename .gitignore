@@ -57,6 +57,7 @@ pnpm-debug.log*
 
 # Android build outputs & local caches
 andriod/node_modules/
+andriod/www/
 andriod/android/.gradle/
 andriod/android/build/
 andriod/android/app/build/

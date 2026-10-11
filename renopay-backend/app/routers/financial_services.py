@@ -1,7 +1,10 @@
 import random
 import uuid
+import logging
 from datetime import datetime
 from typing import Literal
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -179,7 +182,7 @@ async def pay_bill(
         from app.services import accounting_engine
         await accounting_engine.post_transaction_to_journal(db, txn)
     except Exception as e:
-        print(f"Accounting journal post note: {e}")
+        logger.warning("Accounting journal post note: %s", e)
 
     bill_record = BillPayment(
         user_id=user.id,
@@ -265,7 +268,7 @@ async def apply_loan(
         from app.services import accounting_engine
         await accounting_engine.post_transaction_to_journal(db, txn)
     except Exception as e:
-        print(f"Accounting journal post note: {e}")
+        logger.warning("Accounting journal post note: %s", e)
 
     now = datetime.now()
     d = datetime(now.year, now.month, now.day)
@@ -411,7 +414,7 @@ async def repay_loan_emi(
         from app.services import accounting_engine
         await accounting_engine.post_transaction_to_journal(db, txn)
     except Exception as e:
-        print(f"Accounting journal post note: {e}")
+        logger.warning("Accounting journal post note: %s", e)
 
     # Push live balance update
     await ws_manager.push(locked_acc.user_id, "balance_update", {
@@ -541,7 +544,7 @@ async def make_investment(
         from app.services import accounting_engine
         await accounting_engine.post_transaction_to_journal(db, txn)
     except Exception as e:
-        print(f"Accounting journal post note: {e}")
+        logger.warning("Accounting journal post note: %s", e)
 
     inv = Investment(
         user_id=user.id,
