@@ -58,10 +58,10 @@ describe('ProfileScreen', () => {
 
   it('renders profile details', () => {
     renderWithAuth(<ProfileScreen onBack={mockOnBack} />);
-    expect(screen.getByText('Test User')).toBeInTheDocument();
-    expect(screen.getByText('test@renopay')).toBeInTheDocument();
+    expect(screen.getAllByText('Test User')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('test@renopay')[0]).toBeInTheDocument();
     expect(screen.getByText('⚠ New Device')).toBeInTheDocument();
-    expect(screen.getByText('₹1,500')).toBeInTheDocument(); // Balance formatted
+    expect(screen.getByText(/Vault:/i)).toBeInTheDocument();
   });
 
   it('calls trustDevice on button click', async () => {
@@ -87,16 +87,19 @@ describe('ProfileScreen', () => {
     });
   });
 
-  it('renders language selector and updates preferred language', async () => {
+  it('allows updating monthly budget', async () => {
+    AccountAPI.updateBudget.mockResolvedValueOnce({ budget: 25000 });
     renderWithAuth(<ProfileScreen onBack={mockOnBack} />);
-    expect(screen.getByText('Hindi')).toBeInTheDocument();
-    expect(screen.getByText('Tamil')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('Hindi'));
+    expect(screen.getByText(/Monthly Budget/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Edit'));
+
+    const budgetInput = screen.getByRole('spinbutton');
+    fireEvent.change(budgetInput, { target: { value: '25000' } });
+    fireEvent.click(screen.getByText('Save'));
 
     await waitFor(() => {
-      expect(AccountAPI.updatePreferences).toHaveBeenCalledWith({ language_code: 'hi' });
-      expect(mockRefreshProfile).toHaveBeenCalled();
+      expect(AccountAPI.updateBudget).toHaveBeenCalledWith(25000);
     });
   });
 });

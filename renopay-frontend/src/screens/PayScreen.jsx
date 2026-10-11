@@ -78,11 +78,19 @@ export function PayScreen({ onBack, onNavigate, prefillVpa, prefillAmount, prefi
 
   const handleResolveSubmit = (e) => {
     e.preventDefault();
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setErr("You are offline. Reconnect to send payments.");
+      return;
+    }
     if (!vpa.includes("@")) { setErr("Enter valid VPA e.g. name@renopay"); return; }
     resolveVpa(vpa);
   };
 
   const proceedToAuth = () => {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setErr("You are offline. Reconnect to send payments.");
+      return;
+    }
     if (!Number(amount) || Number(amount) <= 0) { setErr("Amount must be > 0"); return; }
     setErr("");
     setIdempotencyKey(crypto.randomUUID()); // fresh key for this attempt

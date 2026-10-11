@@ -13,18 +13,38 @@ defaults:
     working-directory: renopay-frontend
 
 jobs:
-  build:
+  security-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks Secret Scanner
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: "npm"
           cache-dependency-path: renopay-frontend/package-lock.json
-      - run: npm ci
-      - name: Production build
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: npm Security Audit
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Run Vitest Suite (Unit & Component Tests)
+        run: npm test
+
+      - name: Production Build
         run: npm run build
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:

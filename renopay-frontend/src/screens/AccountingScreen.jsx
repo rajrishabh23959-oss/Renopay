@@ -1022,7 +1022,7 @@ export function AccountingScreen({ onBack }) {
                           </tr>
                         </thead>
                         <tbody>
-                          {trialBalance.rows.map((r, i) => (
+                          {(trialBalance.rows || []).map((r, i) => (
                             <tr key={i} className="border-b border-line/50">
                               <td className="py-2 font-mono text-muted">{r.code}</td>
                               <td className="py-2">{r.name}</td>

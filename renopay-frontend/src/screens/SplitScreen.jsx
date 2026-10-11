@@ -47,7 +47,7 @@ export function SplitScreen({ onBack }) {
         )
       );
     }
-  }, [profile]);
+  }, [profile?.account?.vpa, profile?.full_name]);
 
   const participantCount = people.length || 1;
   const billNum = Number(totalBill);

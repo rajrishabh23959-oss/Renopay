@@ -9,14 +9,16 @@ vi.mock('../lib/api', () => ({
   },
 }));
 
+const mockProfile = {
+  full_name: 'Rishab Raj',
+  account: {
+    vpa: 'rishabhraj@renopay',
+  },
+};
+
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({
-    profile: {
-      full_name: 'Rishab Raj',
-      account: {
-        vpa: 'rishabhraj@renopay',
-      },
-    },
+    profile: mockProfile,
   }),
 }));
 

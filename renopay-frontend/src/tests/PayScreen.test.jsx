@@ -82,4 +82,44 @@ describe('PayScreen', () => {
       expect(screen.getByText(/Download Receipt \(PDF\)/i)).toBeInTheDocument();
     });
   });
+
+  it('validates amount must be greater than 0 before proceeding to PIN', async () => {
+    PaymentAPI.resolveVPA.mockResolvedValueOnce({ name: 'Test User' });
+    render(<PayScreen onBack={() => {}} prefillVpa="test@renopay" />);
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('0')).toBeInTheDocument();
+    });
+
+    const amountInput = screen.getByPlaceholderText('0');
+    fireEvent.change(amountInput, { target: { value: '0' } });
+    fireEvent.click(screen.getByText('Continue →'));
+
+    expect(screen.getByText('Amount must be > 0')).toBeInTheDocument();
+    expect(screen.queryByTestId('pin-pad')).not.toBeInTheDocument();
+  });
+
+  it('validates VPA format before resolving', () => {
+    render(<PayScreen onBack={() => {}} />);
+    const input = screen.getByPlaceholderText('anyone@renopay');
+    fireEvent.change(input, { target: { value: 'invalidvpa' } });
+    fireEvent.click(screen.getByText('Find & Pay →'));
+
+    expect(screen.getByText('Enter valid VPA e.g. name@renopay')).toBeInTheDocument();
+    expect(PaymentAPI.resolveVPA).not.toHaveBeenCalled();
+  });
+
+  it('displays offline warning when offline', () => {
+    const originalOnline = navigator.onLine;
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
+
+    render(<PayScreen onBack={() => {}} />);
+    const input = screen.getByPlaceholderText('anyone@renopay');
+    fireEvent.change(input, { target: { value: 'test@renopay' } });
+    fireEvent.click(screen.getByText('Find & Pay →'));
+
+    expect(screen.getByText(/You are offline/i)).toBeInTheDocument();
+
+    Object.defineProperty(navigator, 'onLine', { value: originalOnline, configurable: true });
+  });
 });
