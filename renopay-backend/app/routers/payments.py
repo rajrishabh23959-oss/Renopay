@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -157,14 +158,22 @@ async def add_money(
 
 @router.get("/transactions", response_model=list[TransactionOut])
 async def get_transactions(
-    limit: int = Query(default=50, le=200), offset: int = 0,
+    limit: int = Query(default=50, le=200),
+    offset: int = 0,
+    cursor: str | None = Query(default=None, description="ISO timestamp cursor for keyset pagination"),
     account: Account = Depends(get_current_account),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Transaction)
-        .where(Transaction.account_id == account.id)
-        .order_by(desc(Transaction.created_at))
-        .limit(limit).offset(offset)
-    )
+    query = select(Transaction).where(Transaction.account_id == account.id)
+    if cursor:
+        try:
+            cursor_dt = datetime.fromisoformat(cursor)
+            query = query.where(Transaction.created_at < cursor_dt)
+        except ValueError:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid cursor format")
+    else:
+        query = query.offset(offset)
+
+    query = query.order_by(desc(Transaction.created_at)).limit(limit)
+    result = await db.execute(query)
     return [TransactionOut.from_model(t) for t in result.scalars().all()]

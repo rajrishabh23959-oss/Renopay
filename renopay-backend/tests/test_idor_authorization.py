@@ -8,8 +8,8 @@ from httpx import AsyncClient, ASGITransport
 from app.main import app
 from app.core.security import create_access_token
 from tests.conftest import make_user_with_account
-from app.models.khatabook import KhatabookCustomer
-from app.models.accounting import ChartOfAccounts, AccountType
+from app.models.shopkeeper import KhatabookCustomer
+from app.models.accounting import ChartOfAccount, AccountType
 
 
 async def test_khatabook_customer_idor_isolation(engine):
@@ -61,12 +61,11 @@ async def test_accounting_ledger_idor_isolation(engine):
     user_a, acc_a = await make_user_with_account(setup_session, name="Tenant A", phone=f"93{str(uuid.uuid4().int)[:8]}", pin="111111")
     user_b, acc_b = await make_user_with_account(setup_session, name="Tenant B", phone=f"94{str(uuid.uuid4().int)[:8]}", pin="222222")
 
-    coa_b = ChartOfAccounts(
+    coa_b = ChartOfAccount(
         account_id=acc_b.id,
-        account_number=1010,
+        code=f"VAULT-{str(uuid.uuid4())[:6]}",
         name="User B Private Vault",
         account_type=AccountType.ASSET,
-        balance_paise=10000,
     )
     setup_session.add(coa_b)
     await setup_session.commit()
